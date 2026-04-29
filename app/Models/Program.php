@@ -8,13 +8,16 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 
 class Program extends Model
 {
-    /** @use HasFactory<\Database\Factories\ProgramFactory> */
     use HasFactory, HasUuids;
 
     protected $fillable = ['type', 'name', 'description', 'min_team_size', 'max_team_size', 'is_active'];
 
+    protected $casts = [
+        'is_active' => 'boolean',
+    ];
+
     public function calls()
-{
-    return $this->hasMany(Call::class);
-}
+    {
+        return $this->hasMany(Call::class);
+    }
 }

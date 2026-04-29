@@ -14,13 +14,27 @@ class Team extends Model
     protected $fillable = ['leader_id', 'name', 'competencies'];
 
     public function leader()
-{
-    return $this->belongsTo(User::class, 'leader_id');
-}
+    {
+        return $this->belongsTo(User::class, 'leader_id');
+    }
 
     public function members()
+    {
+        return $this->hasMany(TeamMember::class);
+    }
+
+    public function users()
     {
         return $this->belongsToMany(User::class, 'team_members')
                     ->withPivot('role', 'joined_at');
     }
+
+    public function applications()
+    {
+        return $this->hasMany(Application::class);
+    }
+
+    protected $casts = [
+        'competencies' => 'array',
+    ];
 }

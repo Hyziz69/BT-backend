@@ -16,5 +16,5 @@ class Document extends Model
     ];
 
     public function application() { return $this->belongsTo(Application::class); }
-    public function uploader() { return $this->belongsTo(User::class, 'uploaded_by'); }
+    public function uploadedBy() { return $this->belongsTo(User::class, 'uploaded_by'); }
 }

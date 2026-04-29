@@ -6,10 +6,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasFactory, HasUuids, Notifiable;
+    use HasFactory, HasApiTokens, HasUuids, Notifiable;
 
     protected $fillable = [
         'company_id',
@@ -57,5 +58,20 @@ class User extends Authenticatable
     public function studentProfile()
     {
         return $this->hasOne(StudentProfile::class);
+    }
+
+    public function ledTeams()
+    {
+        return $this->hasMany(Team::class, 'leader_id');
+    }
+
+    public function mentorships()
+    {
+        return $this->hasMany(Mentorship::class, 'mentor_id');
+    }
+
+    public function evaluations()
+    {
+        return $this->hasMany(Evaluation::class, 'evaluator_id');
     }
 }

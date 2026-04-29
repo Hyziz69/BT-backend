@@ -10,18 +10,15 @@ class Company extends Model
 {
     use HasFactory, HasUuids;
 
-    protected $fillable = [
-        'name',
-        'ico',
-        'sector',
-        'description',
-        'website',
-        'logo_url',
-        'status',
-    ];
+    protected $fillable = ['name', 'ico', 'sector', 'description', 'website', 'logo_url', 'status'];
 
     public function users()
     {
         return $this->hasMany(User::class);
+    }
+
+    public function challenges()
+    {
+        return $this->hasMany(CompanyChallenge::class);
     }
 }
