@@ -15,7 +15,6 @@ use Illuminate\Support\Str;
 
 class DocumentController extends Controller
 {
-  
     public const PROGRAM_A_DOC_TYPES = [
         'executive_summary',
         'tech_architecture',
@@ -128,6 +127,42 @@ class DocumentController extends Controller
         }
 
         return Storage::disk('local')->download($document->file_path, $document->filename);
+    }
+
+    public function checklist(Request $request, Application $application): JsonResponse
+    {
+        $this->authorizeAccess($request->user(), $application);
+
+        $required = [
+            'executive_summary',
+            'tech_architecture',
+            'roadmap',
+            'budget',
+            'risk_analysis',
+            'monetization',
+        ];
+
+        $uploaded = $application->documents()
+            ->whereIn('doc_type', $required)
+            ->get()
+            ->keyBy('doc_type');
+
+        $checklist = collect($required)->map(fn ($type) => [
+            'doc_type'    => $type,
+            'uploaded'    => $uploaded->has($type),
+            'version'     => $uploaded->get($type)?->version,
+            'filename'    => $uploaded->get($type)?->filename,
+            'uploaded_at' => $uploaded->get($type)?->created_at,
+        ]);
+
+        $allUploaded = $checklist->every(fn ($item) => $item['uploaded']);
+
+        return response()->json([
+            'data' => [
+                'ready_to_submit' => $allUploaded,
+                'checklist'       => $checklist,
+            ],
+        ]);
     }
 
     public function destroy(Request $request, Application $application, Document $document): JsonResponse
