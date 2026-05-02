@@ -11,7 +11,7 @@ use App\Http\Controllers\Api\ProgramA\CallController;
 use App\Http\Controllers\Api\ProgramA\StudentProfileController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('auth:sanctum')->prefix('program-a')->name('program-a.')->group(function () {
+Route::middleware('auth:api')->prefix('program-a')->name('program-a.')->group(function () {
 
     // Calls
     Route::get('calls', [CallController::class, 'index'])->name('calls.index');
