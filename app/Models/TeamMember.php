@@ -6,6 +6,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class TeamMember extends Model
 {
+    public $primaryKey = null;
+
+    public $incrementing = false;
+    
     public $timestamps = false;
 
     protected $table = 'team_members';

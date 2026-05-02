@@ -130,7 +130,9 @@ class TeamController extends Controller
             return response()->json(['message' => 'User is not a member of this team.'], 404);
         }
 
-        $membership->delete();
+        TeamMember::where('team_id', $team->id)
+        ->where('user_id', $user->id)
+        ->delete();
 
         return response()->json(['message' => 'Member removed.']);
     }

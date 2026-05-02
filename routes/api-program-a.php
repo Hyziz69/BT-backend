@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\ProgramA\ConsultationController;
 use App\Http\Controllers\Api\ProgramA\MilestoneController;
 use App\Http\Controllers\Api\ProgramA\CallController;
 use App\Http\Controllers\Api\ProgramA\StudentProfileController;
+use App\Http\Controllers\Api\ProgramA\TeamInvitationController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:api')->prefix('program-a')->name('program-a.')->group(function () {
@@ -21,8 +22,12 @@ Route::middleware('auth:api')->prefix('program-a')->name('program-a.')->group(fu
 
     // Teams
     Route::apiResource('teams', TeamController::class)->except(['destroy']);
-    Route::post('teams/{team}/members', [TeamController::class, 'addMember'])->name('teams.members.add');
     Route::delete('teams/{team}/members/{user}', [TeamController::class, 'removeMember'])->name('teams.members.remove');
+
+    // Team Invitations
+    Route::post('teams/{team}/invitations', [TeamInvitationController::class, 'send'])->name('teams.invitations.send');
+    Route::get('teams/{team}/invitations', [TeamInvitationController::class, 'index'])->name('teams.invitations.index');
+    Route::post('invitations/accept', [TeamInvitationController::class, 'accept'])->name('invitations.accept');
 
     // Applications
     Route::apiResource('applications', ApplicationController::class)->except(['destroy']);
@@ -49,8 +54,6 @@ Route::middleware('auth:api')->prefix('program-a')->name('program-a.')->group(fu
         Route::get('/', [MentorshipController::class, 'index'])->name('index');
         Route::post('/', [MentorshipController::class, 'store'])->name('store');
         Route::patch('/{mentorship}/end', [MentorshipController::class, 'end'])->name('end');
-
-        // Consultations
         Route::prefix('{mentorship}/consultations')->name('consultations.')->group(function () {
             Route::get('/', [ConsultationController::class, 'index'])->name('index');
             Route::post('/', [ConsultationController::class, 'store'])->name('store');
@@ -69,3 +72,6 @@ Route::middleware('auth:api')->prefix('program-a')->name('program-a.')->group(fu
     Route::get('profile', [StudentProfileController::class, 'show'])->name('profile.show');
     Route::patch('profile', [StudentProfileController::class, 'update'])->name('profile.update');
 });
+
+// Public invitation preview
+Route::get('program-a/invitations/{token}', [TeamInvitationController::class, 'preview'])->name('program-a.invitations.preview');
