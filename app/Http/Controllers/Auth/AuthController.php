@@ -30,27 +30,9 @@ class AuthController extends Controller
         event(new Registered($user));
 
         return response()->json([
-            'message' => 'Registration successful. Please check your email to verify your account.',
+            'message' => 'Registrácia úspešná. Váš účet čaká na schválenie administrátorom.',
+            'status'  => 'pending',
         ], 201);
-    }
-
-    public function verifyEmail(Request $request, string $id, string $hash): JsonResponse
-    {
-        $user = User::findOrFail($id);
-
-        if (! hash_equals($hash, sha1($user->email))) {
-            return response()->json(['message' => 'Invalid verification link.'], 403);
-        }
-
-        if ($user->hasVerifiedEmail()) {
-            return response()->json(['message' => 'Email already verified.'], 200);
-        }
-
-        $user->markEmailAsVerified();
-        $user->status = 'active';
-        $user->save();
-
-        return response()->json(['message' => 'Email verified successfully.'], 200);
     }
 
     public function login(Request $request): JsonResponse
@@ -71,9 +53,20 @@ class AuthController extends Controller
 
         $user = Auth::user();
 
-        if (! $user->hasVerifiedEmail()) {
+        if ($user->status === 'pending') {
             Auth::logout();
-            return response()->json(['message' => 'Please verify your email before logging in.'], 403);
+            return response()->json([
+                'message' => 'Váš účet čaká na schválenie administrátorom.',
+                'status'  => 'pending',
+            ], 403);
+        }
+
+        if ($user->status === 'rejected') {
+            Auth::logout();
+            return response()->json([
+                'message' => 'Váš účet bol zamietnutý. Kontaktujte NTI administráciu.',
+                'status'  => 'rejected',
+            ], 403);
         }
 
         return response()->json([
@@ -86,6 +79,7 @@ class AuthController extends Controller
                 'last_name'    => $user->last_name,
                 'email'        => $user->email,
                 'account_type' => $user->account_type,
+                'status'       => $user->status,
             ],
         ]);
     }
@@ -127,9 +121,9 @@ class AuthController extends Controller
     public function resetPassword(Request $request): JsonResponse
     {
         $request->validate([
-            'token'                 => ['required'],
-            'email'                 => ['required', 'email'],
-            'password'              => ['required', 'string', 'min:8', 'confirmed'],
+            'token'    => ['required'],
+            'email'    => ['required', 'email'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
         $status = Password::reset(
