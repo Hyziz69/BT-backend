@@ -15,12 +15,8 @@ class ProgramController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            // Извлекаем только активные программы.
-            // Если у вас нет поля status, просто уберите строку where()
             $programs = Program::where('is_active', 1)
                 ->orderBy('created_at', 'desc')
-                // Выбираем только те поля, которые реально нужны фронтенду для отображения карточек,
-                // чтобы не гонять лишний вес по сети.
                 ->get(['type','name', 'description']);
 
             return response()->json([

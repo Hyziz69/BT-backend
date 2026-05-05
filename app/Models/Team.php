@@ -23,10 +23,8 @@ class Team extends Model
             // Генерируем код
             do {
                 $code = strtoupper(Str::random(8));
-                // Крутим цикл, пока в базе существует такой же код
             } while (Team::where('invite_code', $code)->exists());
 
-            // Как только нашли уникальный — присваиваем его команде
             $team->invite_code = $code;
         });
     }

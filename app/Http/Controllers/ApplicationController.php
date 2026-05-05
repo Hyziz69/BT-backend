@@ -18,7 +18,7 @@ class ApplicationController extends Controller
             'user_id'           => 'required|uuid',
             'team_id'           => 'required|uuid|exists:teams,id',
             'call_id'           => 'required|uuid|exists:calls,id',
-            'challenge_id'      => 'required|uuid', // Добавьте exists:challenges,id если есть таблица
+            'challenge_id'      => 'required|uuid',
             'motivation_letter' => 'required|string',
             'solution_proposal' => 'nullable|string',
         ]);
@@ -43,7 +43,6 @@ class ApplicationController extends Controller
         }
 
         try {
-            // Создание заявки со статусом 'submitted' и фиксацией времени
             $application = Application::create([
                 'team_id'           => $team->id,
                 'call_id'           => $validated['call_id'],

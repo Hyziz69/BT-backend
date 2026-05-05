@@ -14,7 +14,6 @@ class CallController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        // Обязательно требуем ID программы, чтобы студент не видел "кашу" из всех вызовов
         $request->validate([
             'program_id' => 'required|uuid|exists:programs,id',
         ]);
@@ -22,11 +21,11 @@ class CallController extends Controller
         try {
             $calls = Call::query()
                 ->where('program_id', $request->query('program_id'))
-                // Опционально: Оставляем только те вызовы, которые активны прямо сейчас
+
                 ->where('status', 'open')
                 ->whereDate('opens_at', '<=', now())
                 ->whereDate('closes_at', '>=', now())
-                ->orderBy('closes_at', 'asc') // Сначала показываем те, что скоро закроются
+                ->orderBy('closes_at', 'asc')
                 ->get([
                     'id',
                     'title',

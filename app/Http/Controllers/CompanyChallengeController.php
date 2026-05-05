@@ -14,7 +14,7 @@ class CompanyChallengeController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        // Строго требуем ID вызова из предыдущего шага
+
         $request->validate([
             'call_id' => 'required|uuid|exists:calls,id',
         ]);
@@ -22,14 +22,11 @@ class CompanyChallengeController extends Controller
         try {
             $challenges = CompanyChallenge::query()
                 ->where('call_id', $request->query('call_id'))
-                // Если у вас есть связь с фирмой, подгружаем её название для красивой карточки:
                 // ->with('company:id,name,logo_path')
                 ->orderBy('created_at', 'desc')
                 ->get([
                     'id',
                     'title',
-                    // Для списка достаточно короткого превью описания, если база большая
-                    // 'company_id', // Раскомментируйте, если нужна связь
                 ]);
 
             return response()->json([
@@ -47,7 +44,6 @@ class CompanyChallengeController extends Controller
      */
     public function show(CompanyChallenge $challenge): JsonResponse
     {
-        // Подгружаем все необходимые связи (например, фирму со всеми контактами)
         // $challenge->load('company');
 
         return response()->json([
