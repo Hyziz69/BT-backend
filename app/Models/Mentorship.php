@@ -12,9 +12,23 @@ class Mentorship extends Model
 
     protected $fillable = ['application_id', 'mentor_id', 'notes', 'started_at', 'ended_at'];
 
-    protected $casts = ['started_at' => 'datetime', 'ended_at' => 'datetime'];
+    protected $casts = [
+        'started_at' => 'datetime',
+        'ended_at' => 'datetime',
+    ];
 
-    public function application() { return $this->belongsTo(Application::class); }
-    public function mentor() { return $this->belongsTo(User::class, 'mentor_id'); }
-    public function consultations() { return $this->hasMany(Consultation::class); }
+    public function application()
+    {
+        return $this->belongsTo(Application::class);
+    }
+
+    public function mentor()
+    {
+        return $this->belongsTo(User::class, 'mentor_id');
+    }
+
+    public function consultations()
+    {
+        return $this->hasMany(Consultation::class);
+    }
 }

@@ -80,8 +80,10 @@ class DatabaseSeeder extends Seeder
 
         // Use sync() instead of attach() to prevent accidental double-insertion
         // and explicitly pass the ID string
-        $team->members()->sync([
-            (string) $leader->id => ['role' => 'leader']
+        \App\Models\TeamMember::create([
+            'team_id' => $team->id,
+            'user_id' => $leader->id,
+            'role'    => 'leader',
         ]);
 
         Application::create([

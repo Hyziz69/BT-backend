@@ -23,7 +23,7 @@ class Application extends Model
         return $this->belongsTo(Call::class);
     }
 
-    public function challenge() // For Program B
+    public function challenge() 
     {
         return $this->belongsTo(CompanyChallenge::class, 'challenge_id');
     }
@@ -38,9 +38,9 @@ class Application extends Model
         return $this->hasMany(Evaluation::class);
     }
 
-    public function mentorship()
+    public function mentorships()
     {
-        return $this->hasOne(Mentorship::class);
+        return $this->hasMany(Mentorship::class);
     }
 
     public function milestones()
