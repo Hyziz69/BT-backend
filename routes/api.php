@@ -1,22 +1,37 @@
 <?php
 
-use App\Http\Controllers\ApplicationController;
-use App\Http\Controllers\CallController;
-use App\Http\Controllers\CompanyChallengeController;
-use App\Http\Controllers\ProgramController;
-use App\Http\Controllers\TeamController;
+use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\ProgramA\TeamInvitationController;
+use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\UserController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::post('/teams', [TeamController::class, 'store']);
-Route::delete('/teams/{team}', [TeamController::class, 'destroy']);
-Route::post('/teams/join', [TeamController::class, 'join']);
-Route::post('/teams/{team}/leave', [TeamController::class, 'leave']);
-Route::delete('/teams/{team}/members/{user}', [TeamController::class, 'kickMember']);
-Route::put('/teams/{team}', [TeamController::class, 'update']);
-Route::get('/teams/{team}', [TeamController::class, 'show']);
-Route::get('/teams', [TeamController::class, 'index']);
-Route::get('programs', [ProgramController::class, 'index']);
-Route::get('calls', [CallController::class, 'index']);
-Route::get('challenges', [CompanyChallengeController::class, 'index']);
-Route::get('challenges/{challenge}', [CompanyChallengeController::class, 'show']);
-Route::post('applications', [ApplicationController::class, 'store']);
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
+Route::post('/password/reset', [AuthController::class, 'forgotPassword']);
+Route::post('/password/reset/confirm', [AuthController::class, 'resetPassword']);
+Route::get('/program-a/invitations/{token}', [TeamInvitationController::class, 'preview']);
+
+Route::middleware('auth:api')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/me', [AuthController::class, 'me']);
+    Route::get('/users', [UserController::class, 'index']);
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
+    Route::post('/program-a/invitations/accept', [TeamInvitationController::class, 'accept']);
+    Route::middleware('role:nti_admin')->prefix('admin')->group(function () {
+        Route::get('/dashboard', [AdminController::class, 'dashboard']);
+        Route::get('/users', [AdminController::class, 'users']);
+        Route::get('/users/{user}', [AdminController::class, 'showUser']);
+        Route::patch('/users/{user}', [AdminController::class, 'updateUser']);
+    });
+});
+
+Route::middleware(['auth:api', 'account.active'])->group(function () {
+    Route::post('/program-a/teams/{team}/invitations', [TeamInvitationController::class, 'send']);
+    Route::get('/program-a/teams/{team}/invitations', [TeamInvitationController::class, 'index']);
+});
+
+require __DIR__ . '/api-program-a.php';

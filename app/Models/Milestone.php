@@ -12,7 +12,12 @@ class Milestone extends Model
 
     protected $fillable = ['application_id', 'title', 'status', 'due_date', 'comment'];
 
-    protected $casts = ['due_date' => 'date'];
+    protected $casts = [
+        'due_date' => 'date',
+    ];
 
-    public function application() { return $this->belongsTo(Application::class); }
+    public function application()
+    {
+        return $this->belongsTo(Application::class);
+    }
 }

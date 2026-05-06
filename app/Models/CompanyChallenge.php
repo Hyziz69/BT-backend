@@ -20,14 +20,18 @@ class CompanyChallenge extends Model
         'status',
     ];
 
-    public function company()
-    {
-        return $this->belongsTo(Company::class);
-    }
+    protected $casts = [
+        'budget' => 'decimal:2',
+    ];
 
     public function call()
     {
         return $this->belongsTo(Call::class);
+    }
+
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
     }
 
     public function productOwner()

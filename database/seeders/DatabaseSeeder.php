@@ -11,17 +11,11 @@ use App\Models\Team;
 use App\Models\Application;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 
 class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        User::factory()->count(10)->create([
-            'account_type' => 'student',
-            'status' => 'active',
-        ]);
-        // 1. Create a SuperAdmin for you to log in with
         $admin = User::factory()->create([
             'first_name' => 'NTI',
             'last_name' => 'Administrator',
@@ -31,7 +25,6 @@ class DatabaseSeeder extends Seeder
             'status' => 'active',
         ]);
 
-        // 2. Create the two main Programs
         $progA = Program::create([
             'id' => \Illuminate\Support\Str::uuid(),
             'type' => 'program_a',
@@ -46,7 +39,6 @@ class DatabaseSeeder extends Seeder
             'description' => 'Focus na reálne zadania od firiem.',
         ]);
 
-        // 3. Open a Call for Program B
         $call = Call::create([
             'id' => \Illuminate\Support\Str::uuid(),
             'program_id' => $progB->id,
@@ -57,7 +49,6 @@ class DatabaseSeeder extends Seeder
             'closes_at' => now()->addMonths(2),
         ]);
 
-        // 4. Create a Partner Company and a Challenge
         $company = Company::factory()->create(['name' => 'NitraTech Solutions']);
 
         $challenge = CompanyChallenge::create([
@@ -70,22 +61,21 @@ class DatabaseSeeder extends Seeder
             'status' => 'published',
         ]);
 
-        // 5. Create a Student Team and an Application
         $leader = User::factory()->create([
             'account_type' => 'student',
-            'status' => 'active'
+            'status' => 'active',
         ]);
 
         $team = Team::create([
             'id' => \Illuminate\Support\Str::uuid(),
             'leader_id' => $leader->id,
-            'name' => 'The Nitra Innovators'
+            'name' => 'The Nitra Innovators',
         ]);
 
-        // Use sync() instead of attach() to prevent accidental double-insertion
-        // and explicitly pass the ID string
-        $team->members()->sync([
-            (string) $leader->id => ['role' => 'leader']
+        \App\Models\TeamMember::create([
+            'team_id' => $team->id,
+            'user_id' => $leader->id,
+            'role'    => 'leader',
         ]);
 
         Application::create([

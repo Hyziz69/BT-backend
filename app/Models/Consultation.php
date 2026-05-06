@@ -12,7 +12,12 @@ class Consultation extends Model
 
     protected $fillable = ['mentorship_id', 'scheduled_at', 'notes', 'feedback'];
 
-    protected $casts = ['scheduled_at' => 'datetime'];
+    protected $casts = [
+        'scheduled_at' => 'datetime',
+    ];
 
-    public function mentorship() { return $this->belongsTo(Mentorship::class); }
+    public function mentorship()
+    {
+        return $this->belongsTo(Mentorship::class);
+    }
 }

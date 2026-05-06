@@ -12,9 +12,16 @@ class Document extends Model
 
     protected $fillable = [
         'application_id', 'uploaded_by', 'doc_type', 'classification',
-        'filename', 'file_path', 'mime_type', 'file_size', 'version'
+        'filename', 'file_path', 'mime_type', 'file_size', 'version',
     ];
 
-    public function application() { return $this->belongsTo(Application::class); }
-    public function uploader() { return $this->belongsTo(User::class, 'uploaded_by'); }
+    public function application()
+    {
+        return $this->belongsTo(Application::class);
+    }
+
+    public function uploadedBy()
+    {
+        return $this->belongsTo(User::class, 'uploaded_by');
+    }
 }
