@@ -54,7 +54,7 @@ class TeamInvitationController extends Controller
                 ['token' => $token, 'status' => 'pending', 'expires_at' => now()->addDays(7)]
             );
 
-            $acceptUrl = config('app.frontend_url') . '/invitation/accept?token=' . $token;
+            $acceptUrl = env('FRONTEND_URL') . '/invitation/accept?token=' . $token;
             $hasAccount = User::where('email', $email)->exists();
 
             Mail::send('emails.team-invitation', [
