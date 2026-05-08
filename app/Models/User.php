@@ -47,7 +47,7 @@ class User extends Authenticatable
 
     public function company()
     {
-        return $this->belongsTo(Company::class);
+        return $this->be -ulongsTo(Company::class);
     }
 
     public function teams()
@@ -56,7 +56,7 @@ class User extends Authenticatable
                     ->withPivot('role', 'joined_at');
     }
 
-    public function studentProfile()
+    public function profile()
     {
         return $this->hasOne(StudentProfile::class);
     }

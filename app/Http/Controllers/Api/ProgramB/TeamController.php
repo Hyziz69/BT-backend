@@ -1,13 +1,14 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Api\ProgramB;
 
+use App\Http\Controllers\Controller;
 use App\Models\Team;
-use Illuminate\Http\Request;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use App\Models\User;
 
 class TeamController extends Controller
 {
@@ -23,12 +24,12 @@ class TeamController extends Controller
             return null;
         }
 
-        $hasEndedMilestone = DB::table('milestones')
-            ->where('application_id', $application->id)
-            ->where('status', 'completed')
+        $hasClosedStatus = DB::table('company_challenges')
+            ->where('id', $application->id)
+            ->where('status', 'closed')
             ->exists();
 
-        if ($hasEndedMilestone) {
+        if ($hasClosedStatus) {
             return null;
         }
 
@@ -43,7 +44,7 @@ class TeamController extends Controller
             'competencies.*' => ['string', 'max:50'],
         ]);
 //        $user = auth()->user();
-        $user = User::where('account_type', 'nti_admin')->first();
+        $user = User::where('account_type', 'student')->first();
 
         $alreadyInTeam = DB::table('team_members')
             ->where('user_id', $user->id)

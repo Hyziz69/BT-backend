@@ -57,7 +57,7 @@ class DatabaseSeeder extends Seeder
             'closes_at' => now()->addMonths(2),
         ]);
 
-        // 4. Create a Partner Company and a Challenge
+        // 4. Create a Partner Company and a CompanyChallenge
         $company = Company::factory()->create(['name' => 'NitraTech Solutions']);
 
         $challenge = CompanyChallenge::create([

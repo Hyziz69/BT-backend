@@ -18,6 +18,7 @@ class CompanyChallenge extends Model
         'technical_spec',
         'budget',
         'status',
+        'team_id'
     ];
 
     public function company()
