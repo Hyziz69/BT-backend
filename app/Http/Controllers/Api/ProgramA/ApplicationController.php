@@ -17,23 +17,24 @@ use Illuminate\Support\Facades\DB;
 class ApplicationController extends Controller
 {
     private const TRANSITIONS = [
-        'student' => [
-            'draft'              => ['submitted'],
-            'pending_supplement' => ['submitted'],   // re-submit after revision request
-        ],
-        'nti_admin' => [
-            'submitted'    => ['formally_verified', 'rejected'],
-            'in_evaluation'=> ['pending_supplement', 'approved', 'rejected'],
-            'approved'     => ['onboarding'],
-            'onboarding'   => ['active'],
-            'active'       => ['paused', 'completed'],
-            'paused'       => ['active', 'completed'],
-            'completed'    => ['archived'],
-        ],
-        'evaluator' => [
-            'formally_verified' => ['in_evaluation', 'pending_supplement'],
-        ],
-    ];
+    'student' => [
+        'draft'              => ['submitted'],
+        'pending_supplement' => ['submitted'],
+    ],
+    'nti_admin' => [
+        'submitted'          => ['formally_verified', 'rejected'],
+        'formally_verified'  => ['in_evaluation', 'pending_supplement'],
+        'in_evaluation'      => ['pending_supplement', 'approved', 'rejected'],
+        'approved'           => ['onboarding'],
+        'onboarding'         => ['active'],
+        'active'             => ['paused', 'completed'],
+        'paused'             => ['active', 'completed'],
+        'completed'          => ['archived'],
+    ],
+    'evaluator' => [
+        'formally_verified' => ['in_evaluation', 'pending_supplement'],
+    ],
+];
 
     public function index(Request $request): JsonResponse
     {

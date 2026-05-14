@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Models\User;
-use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -26,8 +25,6 @@ class AuthController extends Controller
             'gdpr_consent'      => true,
             'gdpr_consented_at' => now(),
         ]);
-
-        event(new Registered($user));
 
         return response()->json([
             'message' => 'Registrácia úspešná. Váš účet čaká na schválenie administrátorom.',
