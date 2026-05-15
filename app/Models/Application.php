@@ -8,15 +8,23 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 
 class Application extends Model
 {
-    /** @use HasFactory<\Database\Factories\ApplicationFactory> */
     use HasFactory, HasUuids;
 
-    protected $fillable = ['call_id', 'team_id', 'challenge_id', 'status', 'motivation_letter', 'solution_proposal', 'score', 'decision_notes', 'submitted_at', 'decided_at'];
+    protected $fillable = [
+        'call_id', 'team_id', 'challenge_id', 'status',
+        'motivation_letter', 'solution_proposal', 'score',
+        'decision_notes', 'submitted_at', 'decided_at',
+    ];
+
+    protected $casts = [
+        'submitted_at' => 'datetime',
+        'decided_at'   => 'datetime',
+    ];
 
     public function team()
-{
-    return $this->belongsTo(Team::class);
-}
+    {
+        return $this->belongsTo(Team::class);
+    }
 
     public function call()
     {
@@ -38,9 +46,9 @@ class Application extends Model
         return $this->hasMany(Evaluation::class);
     }
 
-    public function mentorship()
+    public function mentorships()
     {
-        return $this->hasOne(Mentorship::class);
+        return $this->hasMany(Mentorship::class);
     }
 
     public function milestones()

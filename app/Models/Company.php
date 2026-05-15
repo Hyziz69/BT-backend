@@ -24,4 +24,9 @@ class Company extends Model
     {
         return $this->hasMany(User::class);
     }
+
+    public function challenges()
+    {
+        return $this->hasMany(CompanyChallenge::class);
+    }
 }
