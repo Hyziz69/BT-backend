@@ -3,30 +3,37 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
 use App\Mail\AdminApprovalRequestMail;
+use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
-    /**
-     * Регистрация пользователя (твоя логика)
-     */
-    public function register(Request $request)
+    public function register(Request $request): JsonResponse
     {
-        $validated = $request->all();
+        $validated = $request->validate([
+            'first_name'   => ['required', 'string', 'max:100'],
+            'last_name'    => ['required', 'string', 'max:100'],
+            'email'        => ['required', 'email', 'max:255', 'unique:users,email'],
+            'password'     => ['required', 'string', 'min:8', 'confirmed'],
+            'account_type' => ['required', 'in:student,mentor,company_contact'],
+            'gdpr_consent' => ['accepted'],
+        ]);
 
         $user = User::create([
-            'first_name' => $validated['first_name'],
-            'last_name' => $validated['last_name'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
-            'status' => 'pending',
-            'gdpr_consent' => true,
+            'first_name'        => $validated['first_name'],
+            'last_name'         => $validated['last_name'],
+            'email'             => $validated['email'],
+            'password'          => $validated['password'],
+            'account_type'      => $validated['account_type'],
+            'status'            => 'pending',
+            'gdpr_consent'      => true,
             'gdpr_consented_at' => now(),
         ]);
 
@@ -47,59 +54,103 @@ class AuthController extends Controller
             $mailSent = false;
             Log::error('AdminApprovalRequestMail failed', [
                 'user_id' => $user->id,
-                'email' => $user->email,
-                'error' => $e->getMessage(),
+                'email'   => $user->email,
+                'error'   => $e->getMessage(),
             ]);
         }
 
         return response()->json([
-            'message' => $mailSent
+            'message'   => $mailSent
                 ? 'Registration submitted successfully. Please wait for admin approval and watch your email.'
                 : 'Registration submitted successfully, but notification email was not sent.',
-            'status' => 'pending',
+            'status'    => 'pending',
             'mail_sent' => $mailSent,
         ], 201);
     }
 
-    public function login(Request $request)
+    public function login(Request $request): JsonResponse
     {
         $credentials = $request->validate([
-            'email' => 'required|email',
-            'password' => 'required|string',
+            'email'    => ['required', 'email'],
+            'password' => ['required', 'string'],
         ]);
 
         if (!$token = auth('api')->attempt($credentials)) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
+            return response()->json(['message' => 'Invalid email or password.'], 401);
         }
 
+        /** @var User $user */
         $user = auth('api')->user();
 
-        if (!$user->hasVerifiedEmail()) {
-            return response()->json(['message' => 'Email not verified.'], 403);
+        if ($user->status === 'pending') {
+            auth('api')->logout();
+            return response()->json(['message' => 'Your account is waiting for admin approval.'], 403);
         }
 
-        return response()->json([
-            'access_token' => $token,
-            'token_type' => 'bearer',
-            'expires_in' => auth('api')->factory()->getTTL() * 60,
-            'user' => [
-                'id' => $user->id,
-                'first_name' => $user->first_name,
-                'last_name' => $user->last_name,
-                'email' => $user->email,
-                'account_type' => $user->account_type,
-            ]
-        ], 200);
+        if ($user->status === 'suspended') {
+            auth('api')->logout();
+            return response()->json(['message' => 'Your account was not approved.'], 403);
+        }
+
+        return $this->respondWithToken($token, $user);
     }
 
-    public function logout()
+    public function logout(): JsonResponse
     {
         auth('api')->logout();
-        return response()->json(['message' => 'Logged out successfully.'], 200);
+        return response()->json(['message' => 'Logged out successfully.']);
     }
 
-    public function me(Request $request)
+    public function me(): JsonResponse
     {
-        return response()->json($request->user());
+        return response()->json(auth('api')->user());
+    }
+
+    public function forgotPassword(Request $request): JsonResponse
+    {
+        $request->validate(['email' => ['required', 'email']]);
+
+        $status = Password::sendResetLink($request->only('email'));
+
+        if ($status === Password::RESET_LINK_SENT) {
+            return response()->json(['message' => __($status)]);
+        }
+
+        return response()->json(['message' => __($status)], 422);
+    }
+
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'token'    => ['required', 'string'],
+            'email'    => ['required', 'email'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $status = Password::reset(
+            $request->only('email', 'password', 'password_confirmation', 'token'),
+            function (User $user, string $password) {
+                $user->forceFill([
+                    'password'       => Hash::make($password),
+                    'remember_token' => Str::random(60),
+                ])->save();
+            }
+        );
+
+        if ($status === Password::PASSWORD_RESET) {
+            return response()->json(['message' => __($status)]);
+        }
+
+        return response()->json(['message' => __($status)], 422);
+    }
+
+    protected function respondWithToken(string $token, User $user): JsonResponse
+    {
+        return response()->json([
+            'access_token' => $token,
+            'token_type'   => 'bearer',
+            'expires_in'   => auth('api')->factory()->getTTL() * 60,
+            'user'         => $user,
+        ]);
     }
 }
