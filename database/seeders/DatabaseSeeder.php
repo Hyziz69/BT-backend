@@ -63,6 +63,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $leader = User::factory()->create([
+            'password' => Hash::make('password'),
             'account_type' => 'student',
             'status' => 'active',
         ]);

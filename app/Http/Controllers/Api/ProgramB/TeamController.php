@@ -43,8 +43,8 @@ class TeamController extends Controller
             'competencies'   => ['nullable', 'array'],
             'competencies.*' => ['string', 'max:50'],
         ]);
-//        $user = auth()->user();
-        $user = User::where('account_type', 'student')->first();
+
+        $user = $request->user();
 
         $alreadyInTeam = DB::table('team_members')
             ->where('user_id', $user->id)
@@ -91,12 +91,7 @@ class TeamController extends Controller
     }
     public function destroy(Request $request,Team $team): JsonResponse
     {
-        $validated = $request->validate(['user_id' => 'required|uuid']);
-        $user = User::find($validated['user_id']);
-
-        if (!$user) {
-            return response()->json(['message' => 'Používateľ nenájdený.'], 404);
-        }
+        $user = $request->user();
 
         if ($team->leader_id !== $user->id && $user->account_type !== 'nti_admin') {
             return response()->json([
@@ -132,11 +127,7 @@ class TeamController extends Controller
     public function join(Request $request): JsonResponse
     {
 
-        $user = User::where('account_type', 'student')->skip(2)->first();
-
-        if (!$user) {
-            return response()->json(['message' => 'Druhý študent nebol nájdený.'], 404);
-        }
+        $user = $request->user();
 
 
         $validated = $request->validate([
@@ -177,9 +168,7 @@ class TeamController extends Controller
     }
     public function leave(Request $request, Team $team): JsonResponse
     {
-        //$user = auth()->user();
-        $validated = $request->validate(['user_id' => 'required|uuid']);
-        $user = User::find($validated['user_id']);
+        $user = $request->user();
 
         if (!$user) {
             return response()->json(['message' => 'Používateľ nenájdený.'], 404);
@@ -228,14 +217,12 @@ class TeamController extends Controller
 
     public function kickMember(Request $request, Team $team, User $user): JsonResponse
     {
-        $validated = $request->validate(['leader_id' => 'required|uuid']);
-        $actingUser = User::find($validated['leader_id']);
+        $actingUser = $request->user();
 
-        if (!$actingUser) {
-            return response()->json(['message' => 'Používateľ nenájdený.'], 404);
-        }
+        $isAdmin = $actingUser->account_type === 'nti_admin';
+        $isLeader = $team->leader_id === $actingUser->id;
 
-        if ($team->leader_id !== $user->id && $user->account_type !== 'nti_admin') {
+        if (!$isLeader && !$isAdmin) {
             return response()->json(['message' => 'Iba líder tímu môže odstraňovať členov.'], 403);
         }
 
@@ -250,7 +237,7 @@ class TeamController extends Controller
         }
 
         $hasApplication = DB::table('applications')->where('team_id', $team->id)->exists();
-        if ($hasApplication) {
+        if ($hasApplication && !$isAdmin) {
             return response()->json([
                 'message' => 'Tím už podal prihlášku. Zloženie tímu je uzamknuté a členovia nemôžu byť odstraňovaní.'
             ], 403);
@@ -272,13 +259,7 @@ class TeamController extends Controller
 
     public function update(Request $request, Team $team): JsonResponse
     {
-        $validatedUser = $request->validate(['user_id' => 'required|uuid']);
-        $actingUser = User::find($validatedUser['user_id']);
-
-        if (!$actingUser) {
-            return response()->json(['message' => 'Používateľ nenájdený.'], 404);
-        }
-
+        $actingUser = $request->user();
 
         if ($team->leader_id !== $actingUser->id && $actingUser->account_type !== 'nti_admin') {
             return response()->json(['message' => 'Nemáte oprávnenie upravovať tento tím.'], 403);
@@ -312,8 +293,7 @@ class TeamController extends Controller
     public function show(Request $request, Team $team): JsonResponse
     {
 
-        $request->validate(['user_id' => 'required|uuid']);
-        $user = User::find($request->query('user_id'));
+        $user = $request->user();
 
         if (!$user) {
             return response()->json(['message' => 'Používateľ nenájdený.'], 404);
@@ -343,12 +323,8 @@ class TeamController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $request->validate(['user_id' => 'required|uuid']);
-        $user = User::find($request->query('user_id'));
+        $user = $request->user();
 
-        if (!$user) {
-            return response()->json(['message' => 'Používateľ nenájdený.'], 404);
-        }
 
         $allowedRoles = ['mentor', 'company_contact', 'editor', 'nti_admin', 'superadmin'];
         $hasElevatedPrivileges = in_array($user->account_type, $allowedRoles);

@@ -15,8 +15,7 @@ class StudentProfileController extends Controller
      */
     public function show(Request $request): JsonResponse
     {
-//        $user = $request->user();
-          $user = \App\Models\User::where('account_type', 'student')->first();
+        $user = $request->user();
         $profile = StudentProfile::firstOrCreate(
             ['user_id' => $user->id],
             [
@@ -38,8 +37,7 @@ class StudentProfileController extends Controller
      */
     public function update(Request $request): JsonResponse
     {
-//        $user = $request->user();
-          $user = \App\Models\User::where('account_type', 'student')->first();
+        $user = $request->user();
 
         if ($user->account_type !== 'student') {
             return response()->json(['message' => 'Only students have profiles.'], 403);

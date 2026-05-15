@@ -46,8 +46,6 @@ class CompanyChallengeController extends Controller
      */
     public function show(CompanyChallenge $challenge): JsonResponse
     {
-        // TODO: Ensure the challenge is 'published' before showing details to a student
-
         return response()->json([
             'challenge' => $challenge
         ], 200);

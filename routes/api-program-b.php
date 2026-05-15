@@ -9,34 +9,51 @@ use App\Http\Controllers\Api\ProgramB\TeamController;
 use App\Http\Controllers\StudentProfileController;
 use Illuminate\Support\Facades\Route;
 
-Route::post('/teams', [TeamController::class, 'store']);
-Route::delete('/teams/{team}', [TeamController::class, 'destroy']);
-Route::post('/teams/join', [TeamController::class, 'join']);
-Route::post('/teams/{team}/leave', [TeamController::class, 'leave']);
-Route::delete('/teams/{team}/members/{user}', [TeamController::class, 'kickMember']);
-Route::put('/teams/{team}', [TeamController::class, 'update']);
-Route::get('/teams/{team}', [TeamController::class, 'show']);
-Route::get('/teams', [TeamController::class, 'index']);
-Route::get('programs', [ProgramController::class, 'index']);
-Route::get('calls', [CallController::class, 'index']);
+Route::middleware('auth:api')->prefix('program-b')->name('program-b.')->group(function () {
 
-Route::post('applications', [ApplicationController::class, 'store']);
-Route::post('applications/{application}/select', [ApplicationController::class, 'select']);
-Route::post('applications/{application}/assign-mentor', [ApplicationController::class, 'assignMentor']);
-Route::post('applications/{application}/assign-po', [ApplicationController::class, 'assignPo']);
-Route::post('applications/{application}/approve-delivery', [ApplicationController::class, 'approveDelivery']);
+    // Programs & Calls
+    Route::get('programs', [ProgramController::class, 'index'])->name('programs.index');
+    Route::get('calls', [CallController::class, 'index'])->name('calls.index');
 
-Route::post('/companies/register', [CompanyController::class, 'register']);
-Route::get('/companies/{company}', [CompanyController::class, 'show']);
-Route::put('/companies/{company}', [CompanyController::class, 'update']);
+    // Teams
+    Route::prefix('teams')->name('teams.')->group(function () {
+        Route::get('/', [TeamController::class, 'index'])->name('index');
+        Route::post('/', [TeamController::class, 'store'])->name('store');
+        Route::get('/{team}', [TeamController::class, 'show'])->name('show');
+        Route::put('/{team}', [TeamController::class, 'update'])->name('update');
+        Route::delete('/{team}', [TeamController::class, 'destroy'])->name('destroy');
+        Route::post('/join', [TeamController::class, 'join'])->name('join');
+        Route::post('/{team}/leave', [TeamController::class, 'leave'])->name('leave');
+        Route::delete('/{team}/members/{user}', [TeamController::class, 'kickMember'])->name('members.kick');
+    });
 
-// 2. CompanyChallenge management (company side)
-Route::get('/program-b/challenges', [CompanyChallengeController::class, 'index']);
-Route::get('/program-b/challenges/{challenge}', [CompanyChallengeController::class, 'show']);
-Route::post('/program-b/challenges', [CompanyChallengeController::class, 'store']);
-Route::put('/program-b/challenges/{challenge}', [CompanyChallengeController::class, 'update']);
-Route::patch('/program-b/challenges/{challenge}/status', [CompanyChallengeController::class, 'updateStatus']);
+    // Applications
+    Route::prefix('applications')->name('applications.')->group(function () {
+        Route::post('/', [ApplicationController::class, 'store'])->name('store');
+        Route::post('/{application}/select', [ApplicationController::class, 'select'])->name('select');
+        Route::post('/{application}/assign-mentor', [ApplicationController::class, 'assignMentor'])->name('assign-mentor');
+        Route::post('/{application}/assign-po', [ApplicationController::class, 'assignPo'])->name('assign-po');
+        Route::post('/{application}/approve-delivery', [ApplicationController::class, 'approveDelivery'])->name('approve-delivery');
+    });
 
-Route::get('/profile', [StudentProfileController::class, 'show']);
-Route::post('/profile', [StudentProfileController::class, 'update']);
+    // Companies
+    Route::prefix('companies')->name('companies.')->group(function () {
+        Route::post('/register', [CompanyController::class, 'register'])->name('register');
+        Route::get('/{company}', [CompanyController::class, 'show'])->name('show');
+        Route::put('/{company}', [CompanyController::class, 'update'])->name('update');
+    });
+
+    // Company Challenges
+    Route::prefix('challenges')->name('challenges.')->group(function () {
+        Route::get('/', [CompanyChallengeController::class, 'index'])->name('index');
+        Route::post('/', [CompanyChallengeController::class, 'store'])->name('store');
+        Route::get('/{challenge}', [CompanyChallengeController::class, 'show'])->name('show');
+        Route::put('/{challenge}', [CompanyChallengeController::class, 'update'])->name('update');
+        Route::patch('/{challenge}/status', [CompanyChallengeController::class, 'updateStatus'])->name('status.update');
+    });
+
+    // Student Profile
+    Route::get('/profile', [StudentProfileController::class, 'show'])->name('profile.show');
+    Route::post('/profile', [StudentProfileController::class, 'update'])->name('profile.update');
+});
 

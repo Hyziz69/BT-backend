@@ -18,25 +18,23 @@ class ApplicationController extends Controller
 {
     public function store(Request $request): JsonResponse
     {
-        // 1. We no longer expect files here, just standard JSON
+        $user = $request->user();
+
+        $team = Team::with('members.profile')
+            ->where('leader_id', $user->id)
+            ->first();
+
+        if (!$team) {
+            return response()->json(['message' => 'Nie ste lídrom žiadneho tímu alebo tím neexistuje.'], 403);
+        }
+
         $validated = $request->validate([
-            'user_id'           => 'required|uuid',
-            'team_id'           => 'required|uuid|exists:teams,id',
             'call_id'           => 'required|uuid|exists:calls,id',
             'challenge_id'      => 'required|uuid',
-            'motivation_letter' => 'required|string',
+            'motivation_letter' => 'nullable|string',
             'solution_proposal' => 'nullable|string',
         ]);
 
-        $user = User::find($validated['user_id']);
-
-        // 2. Load the team along with its members and their profiles!
-        // This is crucial for checking the CVs in one go.
-        $team = Team::with('members.profile')->find($validated['team_id']);
-
-        if (!$user) {
-            return response()->json(['message' => 'Používateľ nenájdený.'], 404);
-        }
 
         if ($team->leader_id !== $user->id) {
             return response()->json(['message' => 'Iba líder tímu môže podať prihlášku.'], 403);
@@ -72,7 +70,7 @@ class ApplicationController extends Controller
                 'team_id'           => $team->id,
                 'call_id'           => $validated['call_id'],
                 'challenge_id'      => $validated['challenge_id'],
-                'motivation_letter' => $validated['motivation_letter'],
+                'motivation_letter' => $validated['motivation_letter'] ?? null,
                 'solution_proposal' => $validated['solution_proposal'] ?? null,
                 'status'            => 'submitted',
                 'submitted_at'      => now(),
@@ -93,7 +91,15 @@ class ApplicationController extends Controller
      */
     public function select(Request $request, Application $application): JsonResponse
     {
-        // TODO: Add NTI Admin or Company Representative check
+        $user = $request->user();
+        $isAdmin = $user->account_type === 'nti_admin';
+
+        if (!$isAdmin) {
+            return response()->json(['message' => 'Nemáte oprávnenie schvalit ziadost.'], 403);
+        }
+        if ($application->status !== 'submitted') {
+            return response()->json(['message' => 'Túto prihlášku už nie je možné upravovať.'], 422);
+        }
 
         try {
             DB::transaction(function () use ($application) {
@@ -102,9 +108,8 @@ class ApplicationController extends Controller
                     'status' => 'approved',
                     'decided_at' => now(),
                 ]);
-                $challenge = CompanyChallenge::find($application->challenge_id);
-                if ($challenge) {
-                    $challenge->update([
+                if ($application->challenge) {
+                    $application->challenge->update([
                         'team_id' => $application->team_id,
                         'status'  => 'assigned'
                     ]);
@@ -138,6 +143,13 @@ class ApplicationController extends Controller
      */
     public function assignMentor(Request $request, Application $application): JsonResponse
     {
+        $user = $request->user();
+        $isAdmin = $user->account_type === 'nti_admin';
+
+        if (!$isAdmin) {
+            return response()->json(['message' => 'Nemáte oprávnenie pridat mentora.'], 403);
+        }
+
         $validated = $request->validate(['mentor_id' => 'required|uuid|exists:users,id']);
 
         try {
@@ -160,6 +172,13 @@ class ApplicationController extends Controller
      */
     public function assignPo(Request $request, Application $application): JsonResponse
     {
+        $user = $request->user();
+        $isAdmin = $user->account_type === 'nti_admin';
+
+        if (!$isAdmin) {
+            return response()->json(['message' => 'Nemáte oprávnenie pridat product ownera.'], 403);
+        }
+
         $validated = $request->validate(['product_owner_id' => 'required|uuid|exists:users,id']);
 
         try {
@@ -175,6 +194,12 @@ class ApplicationController extends Controller
      */
     public function approveDelivery(Request $request, Application $application): JsonResponse
     {
+        $user = $request->user();
+        $isAdmin = $user->account_type === 'nti_admin';
+        if (!$isAdmin) {
+            return response()->json(['message' => 'Nemáte oprávnenie schváliť tento projekt.'], 403);
+        }
+
         if ($application->status === 'archived') {
             return response()->json(['message' => 'Tento projekt už je uzavretý.'], 422);
         }
@@ -185,14 +210,14 @@ class ApplicationController extends Controller
                     'status' => 'archived'
                 ]);
 
-                $challenge = \App\Models\CompanyChallenge::find($application->challenge_id);
+                $challenge = CompanyChallenge::find($application->challenge_id);
                 if ($challenge) {
                     $challenge->update([
                         'status' => 'closed'
                     ]);
                 }
 
-                \App\Models\Milestone::create([
+                Milestone::create([
                     'application_id' => $application->id,
                     'title'          => 'Finálne odovzdanie a schválenie projektu', // "Финальная сдача и одобрение проекта"
                     'status'         => 'completed',
@@ -207,7 +232,7 @@ class ApplicationController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Approve delivery error: ' . $e->getMessage());
+            Log::error('Approve delivery error: ' . $e->getMessage());
             return response()->json(['message' => 'Vyskytla sa chyba pri uzatváraní projektu.'], 500);
         }
     }

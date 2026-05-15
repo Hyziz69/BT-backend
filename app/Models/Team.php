@@ -34,7 +34,8 @@ class Team extends Model
 
     public function members()
     {
-        return $this->hasMany(TeamMember::class);
+        return $this->belongsToMany(User::class, 'team_members', 'team_id', 'user_id')
+            ->withPivot('role', 'joined_at');
     }
 
     public function users()
