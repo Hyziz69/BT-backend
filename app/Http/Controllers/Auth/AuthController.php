@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Mail\AdminApprovalRequestMail;
+use App\Mail\AccountApprovedMail;
+use App\Mail\AccountRejectedMail;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -61,8 +63,8 @@ class AuthController extends Controller
 
         return response()->json([
             'message'   => $mailSent
-                ? 'Registration submitted successfully. Please wait for admin approval and watch your email.'
-                : 'Registration submitted successfully, but notification email was not sent.',
+                ? 'Registration submitted. Please wait for admin approval.'
+                : 'Registration submitted, but notification email failed.',
             'status'    => 'pending',
             'mail_sent' => $mailSent,
         ], 201);
@@ -84,12 +86,16 @@ class AuthController extends Controller
 
         if ($user->status === 'pending') {
             auth('api')->logout();
-            return response()->json(['message' => 'Your account is waiting for admin approval.'], 403);
+            return response()->json([
+                'message' => 'Your account is waiting for admin approval.',
+            ], 403);
         }
 
         if ($user->status === 'suspended') {
             auth('api')->logout();
-            return response()->json(['message' => 'Your account was not approved.'], 403);
+            return response()->json([
+                'message' => 'Your account has been rejected.',
+            ], 403);
         }
 
         return $this->respondWithToken($token, $user);
