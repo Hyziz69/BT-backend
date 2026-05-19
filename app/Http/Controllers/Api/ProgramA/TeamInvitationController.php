@@ -56,11 +56,13 @@ class TeamInvitationController extends Controller
 
             $acceptUrl = env('FRONTEND_URL') . '/invitation/accept?token=' . $token;
             $hasAccount = User::where('email', $email)->exists();
+            $registerUrl = env('FRONTEND_URL') . '/register?redirect=' . urlencode('/invitation/accept?token=' . $token);
 
             Mail::send('emails.team-invitation', [
                 'teamName'   => $team->name,
                 'leaderName' => $request->user()->first_name . ' ' . $request->user()->last_name,
                 'acceptUrl'  => $acceptUrl,
+                'registerUrl' => $registerUrl,
                 'hasAccount' => $hasAccount,
             ], function ($message) use ($email, $team) {
                 $message->to($email)->subject('Pozvánka do tímu ' . $team->name . ' | NTI');
@@ -78,11 +80,20 @@ class TeamInvitationController extends Controller
         $invitation = TeamInvitation::with('team')
             ->where('token', $token)
             ->where('status', 'pending')
-            ->where('expires_at', '>', now())
             ->first();
 
         if (!$invitation) {
-            return response()->json(['message' => 'Pozvánka je neplatná alebo vypršala.'], 404);
+            return response()->json([
+                'message' => 'This invitation link is invalid.',
+                'reason'  => 'invalid',
+            ], 404);
+        }
+
+        if ($invitation->expires_at->isPast()) {
+            return response()->json([
+                'message' => 'This invitation has expired. Please ask the team leader to send a new one.',
+                'reason'  => 'expired',
+            ], 410);
         }
 
         return response()->json([

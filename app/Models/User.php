@@ -77,6 +77,17 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
         return $this->hasMany(Evaluation::class, 'evaluator_id');
     }
 
+    public function sendPasswordResetNotification($token): void
+    {
+        $url = env('FRONTEND_URL') . '/reset-password?token=' . $token . '&email=' . urlencode($this->email);
+        $this->notify(new \App\Notifications\PasswordResetNotification($url));
+    }
+
+    public function sendEmailVerificationNotification(): void
+    {
+        $this->notify(new \App\Notifications\VerifyEmailNotification());
+    }
+
     public function getJWTIdentifier(): mixed
     {
         return $this->getKey();

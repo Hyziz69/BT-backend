@@ -21,11 +21,14 @@
 
         @if($hasAccount)
             <p>Prihláste sa a kliknite nižšie pre prijatie:</p>
+            <a href="{{ $acceptUrl }}" class="btn">Prijať pozvánku</a>
         @else
-            <p>Zaregistrujte sa na NTI portáli — pozvánka sa automaticky prepojí s vaším účtom.</p>
+            <p>Nemáte ešte účet? Zaregistrujte sa a pozvánka sa automaticky prepojí s vaším účtom.</p>
+            <a href="{{ $registerUrl }}" class="btn">Zaregistrovať sa a prijať</a>
+            <p style="margin-top:12px; font-size:13px; color:#666;">
+                Už máte účet? <a href="{{ $acceptUrl }}">Prihláste sa a prijmite pozvánku</a>
+            </p>
         @endif
-
-        <a href="{{ $acceptUrl }}" class="btn">Prijať pozvánku</a>
 
         <p class="note">Odkaz platí 7 dní. Ak ste túto pozvánku nečakali, ignorujte tento e-mail.</p>
     </div>

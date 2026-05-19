@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Admin\AdminProgramController;
 use App\Http\Controllers\Api\ProgramA\TeamInvitationController;
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\UserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -14,11 +15,18 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/password/reset', [AuthController::class, 'forgotPassword']);
 Route::post('/password/reset/confirm', [AuthController::class, 'resetPassword']);
+
+Route::get('/email/verify/{id}/{hash}', [VerifyEmailController::class, 'verify'])
+    ->middleware(['signed', 'throttle:6,1'])
+    ->name('verification.verify');
+Route::post('/email/verify/resend', [VerifyEmailController::class, 'resend'])
+    ->middleware(['throttle:6,1']);
 Route::get('/program-a/invitations/{token}', [TeamInvitationController::class, 'preview']);
 
 Route::middleware('auth:api')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::patch('/user/password', [AuthController::class, 'changePassword']);
     Route::get('/users', [UserController::class, 'index']);
     Route::get('/user', function (Request $request) {
         return $request->user();

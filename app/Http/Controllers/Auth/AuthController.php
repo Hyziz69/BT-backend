@@ -3,13 +3,11 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Mail\AdminApprovalRequestMail;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 
@@ -37,34 +35,16 @@ class AuthController extends Controller
             'gdpr_consented_at' => now(),
         ]);
 
-        $mailSent = true;
-
+        // Send email verification — admin will be notified only after user verifies
         try {
-            $adminEmails = User::query()
-                ->where('account_type', 'nti_admin')
-                ->pluck('email')
-                ->filter()
-                ->unique()
-                ->values();
-
-            foreach ($adminEmails as $email) {
-                Mail::to($email)->send(new AdminApprovalRequestMail($user));
-            }
+            $user->sendEmailVerificationNotification();
         } catch (\Throwable $e) {
-            $mailSent = false;
-            Log::error('AdminApprovalRequestMail failed', [
-                'user_id' => $user->id,
-                'email'   => $user->email,
-                'error'   => $e->getMessage(),
-            ]);
+            Log::error('VerifyEmailNotification failed', ['user_id' => $user->id, 'error' => $e->getMessage()]);
         }
 
         return response()->json([
-            'message'   => $mailSent
-                ? 'Registration submitted successfully. Please wait for admin approval and watch your email.'
-                : 'Registration submitted successfully, but notification email was not sent.',
-            'status'    => 'pending',
-            'mail_sent' => $mailSent,
+            'message' => 'Registration submitted. Please check your email to verify your address.',
+            'status'  => 'pending',
         ], 201);
     }
 
@@ -142,6 +122,25 @@ class AuthController extends Controller
         }
 
         return response()->json(['message' => __($status)], 422);
+    }
+
+    public function changePassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'current_password' => ['required', 'string'],
+            'password'         => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        /** @var User $user */
+        $user = auth('api')->user();
+
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json(['message' => 'Current password is incorrect.'], 422);
+        }
+
+        $user->update(['password' => Hash::make($request->password)]);
+
+        return response()->json(['message' => 'Password changed successfully.']);
     }
 
     protected function respondWithToken(string $token, User $user): JsonResponse
