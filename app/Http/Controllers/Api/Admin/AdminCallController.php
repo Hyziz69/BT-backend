@@ -33,8 +33,8 @@ class AdminCallController extends Controller
             'title' => ['required', 'string', 'max:300'],
             'description' => ['nullable', 'string'],
             'evaluation_criteria' => ['nullable', 'array'],
-            'opens_at' => ['nullable', 'date'],
-            'closes_at' => ['nullable', 'date', 'after:opens_at'],
+            'opens_at' => ['nullable', 'date', 'after_or_equal:1970-01-01 00:00:01', 'before:2038-01-19 03:14:07'],
+            'closes_at' => ['nullable', 'date', 'after:opens_at', 'before:2038-01-19 03:14:07'],
         ]);
 
         $call = Call::create([
@@ -56,8 +56,8 @@ class AdminCallController extends Controller
             'title' => ['sometimes', 'required', 'string', 'max:300'],
             'description' => ['nullable', 'string'],
             'evaluation_criteria' => ['nullable', 'array'],
-            'opens_at' => ['nullable', 'date'],
-            'closes_at' => ['nullable', 'date', 'after:opens_at'],
+            'opens_at' => ['nullable', 'date', 'after_or_equal:1970-01-01 00:00:01', 'before:2038-01-19 03:14:07'],
+            'closes_at' => ['nullable', 'date', 'after:opens_at', 'before:2038-01-19 03:14:07'],
             'status' => ['sometimes', 'required', Rule::in(['draft', 'open', 'evaluating', 'closed'])],
         ]);
 

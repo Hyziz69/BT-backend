@@ -48,7 +48,7 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
 
     public function company()
     {
-        return $this->be -ulongsTo(Company::class);
+        return $this->belongsTo(Company::class);
     }
 
     public function teams()

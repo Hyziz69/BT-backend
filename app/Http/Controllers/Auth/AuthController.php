@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Mail\AdminApprovalRequestMail;
+use App\Mail\RegistrationSubmittedMail;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,34 +38,16 @@ class AuthController extends Controller
             'gdpr_consented_at' => now(),
         ]);
 
-        $mailSent = true;
-
-        try {
-            $adminEmails = User::query()
-                ->where('account_type', 'nti_admin')
-                ->pluck('email')
-                ->filter()
-                ->unique()
-                ->values();
-
-            foreach ($adminEmails as $email) {
-                Mail::to($email)->send(new AdminApprovalRequestMail($user));
-            }
-        } catch (\Throwable $e) {
-            $mailSent = false;
-            Log::error('AdminApprovalRequestMail failed', [
-                'user_id' => $user->id,
-                'email'   => $user->email,
-                'error'   => $e->getMessage(),
-            ]);
-        }
+        $adminMailSent = $this->sendAdminApprovalNotification($user);
+        $userMailSent = $this->sendRegistrationSubmittedNotification($user);
 
         return response()->json([
-            'message'   => $mailSent
-                ? 'Registration submitted successfully. Please wait for admin approval and watch your email.'
-                : 'Registration submitted successfully, but notification email was not sent.',
-            'status'    => 'pending',
-            'mail_sent' => $mailSent,
+            'message' => 'Registration submitted successfully. Please wait for admin approval.',
+            'status' => 'pending',
+            'mail_sent' => [
+                'admin' => $adminMailSent,
+                'user' => $userMailSent,
+            ],
         ], 201);
     }
 
@@ -84,11 +67,13 @@ class AuthController extends Controller
 
         if ($user->status === 'pending') {
             auth('api')->logout();
+
             return response()->json(['message' => 'Your account is waiting for admin approval.'], 403);
         }
 
         if ($user->status === 'suspended') {
             auth('api')->logout();
+
             return response()->json(['message' => 'Your account was not approved.'], 403);
         }
 
@@ -98,6 +83,7 @@ class AuthController extends Controller
     public function logout(): JsonResponse
     {
         auth('api')->logout();
+
         return response()->json(['message' => 'Logged out successfully.']);
     }
 
@@ -108,7 +94,9 @@ class AuthController extends Controller
 
     public function forgotPassword(Request $request): JsonResponse
     {
-        $request->validate(['email' => ['required', 'email']]);
+        $request->validate([
+            'email' => ['required', 'email'],
+        ]);
 
         $status = Password::sendResetLink($request->only('email'));
 
@@ -152,5 +140,139 @@ class AuthController extends Controller
             'expires_in'   => auth('api')->factory()->getTTL() * 60,
             'user'         => $user,
         ]);
+    }
+
+    private function sendAdminApprovalNotification(User $user): bool
+    {
+        try {
+            $adminEmails = User::query()
+                ->whereIn('account_type', ['nti_admin', 'superadmin'])
+                ->where('status', 'active')
+                ->pluck('email')
+                ->filter()
+                ->unique()
+                ->values();
+
+            if ($adminEmails->isEmpty()) {
+                Log::warning('AdminApprovalRequestMail was not sent: no active admin recipients.', [
+                    'new_user_id' => $user->id,
+                    'new_user_email' => $user->email,
+                ]);
+
+                return false;
+            }
+
+            foreach ($adminEmails as $email) {
+                $this->sendWithMailtrapThrottle(function () use ($email, $user) {
+                    Mail::to($email)->send(new AdminApprovalRequestMail($user));
+                });
+            }
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('AdminApprovalRequestMail failed.', [
+                'new_user_id' => $user->id,
+                'new_user_email' => $user->email,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    private function sendRegistrationSubmittedNotification(User $user): bool
+    {
+        try {
+            $this->sendWithMailtrapThrottle(function () use ($user) {
+                Mail::to($user->email)->send(new RegistrationSubmittedMail($user));
+            });
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('RegistrationSubmittedMail failed.', [
+                'new_user_id' => $user->id,
+                'new_user_email' => $user->email,
+                'account_type' => $user->account_type,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    private function sendWithMailtrapThrottle(callable $sendMail): void
+    {
+        if (!$this->isMailtrapMailer()) {
+            $sendMail();
+
+            return;
+        }
+
+        $delaySeconds = (int) env('MAILTRAP_SEND_DELAY_SECONDS', 11);
+
+        if ($delaySeconds <= 0) {
+            $sendMail();
+
+            return;
+        }
+
+        $frameworkPath = storage_path('framework');
+
+        if (!is_dir($frameworkPath)) {
+            mkdir($frameworkPath, 0775, true);
+        }
+
+        $lockPath = $frameworkPath . DIRECTORY_SEPARATOR . 'mailtrap-mail-throttle.lock';
+        $statePath = $frameworkPath . DIRECTORY_SEPARATOR . 'mailtrap-mail-next-time.txt';
+
+        $lockFile = fopen($lockPath, 'c+');
+
+        if (!$lockFile) {
+            sleep($delaySeconds);
+            $sendMail();
+
+            return;
+        }
+
+        try {
+            flock($lockFile, LOCK_EX);
+
+            $now = microtime(true);
+            $nextAvailableTime = $this->readNextAvailableMailTime($statePath);
+
+            if ($nextAvailableTime > $now) {
+                $waitSeconds = $nextAvailableTime - $now;
+                usleep((int) round($waitSeconds * 1000000));
+            }
+
+            $sendMail();
+
+            file_put_contents($statePath, (string) (microtime(true) + $delaySeconds));
+        } finally {
+            flock($lockFile, LOCK_UN);
+            fclose($lockFile);
+        }
+    }
+
+    private function isMailtrapMailer(): bool
+    {
+        $smtpHost = strtolower((string) config('mail.mailers.smtp.host', ''));
+
+        return str_contains($smtpHost, 'mailtrap');
+    }
+
+    private function readNextAvailableMailTime(string $statePath): float
+    {
+        if (!file_exists($statePath)) {
+            return 0.0;
+        }
+
+        $value = trim((string) file_get_contents($statePath));
+
+        if ($value === '' || !is_numeric($value)) {
+            return 0.0;
+        }
+
+        return (float) $value;
     }
 }

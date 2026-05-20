@@ -20,7 +20,7 @@ class AccountRejectedMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Your account request was reviewed',
+            subject: 'Your NTI account request was reviewed',
         );
     }
 

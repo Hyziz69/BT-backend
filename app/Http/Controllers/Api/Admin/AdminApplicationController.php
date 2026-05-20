@@ -55,17 +55,18 @@ class AdminApplicationController extends Controller
 
         $mentor = User::where('id', $validated['mentor_id'])
             ->where('account_type', 'mentor')
+            ->where('status', 'active')
             ->first();
 
         if (!$mentor) {
             return response()->json([
-                'message' => 'Selected user is not a mentor.',
+                'message' => 'Selected user is not an active mentor.',
             ], 422);
         }
 
-        if (!in_array($application->status, ['approved', 'onboarding', 'active'])) {
+        if (!in_array($application->status, ['submitted', 'formally_verified', 'in_evaluation', 'approved', 'onboarding', 'active'])) {
             return response()->json([
-                'message' => 'Mentor can only be assigned to approved, onboarding or active applications.',
+                'message' => 'Mentor can only be assigned to submitted, evaluation, approved, onboarding or active applications.',
             ], 422);
         }
 

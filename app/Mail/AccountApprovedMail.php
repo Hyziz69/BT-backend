@@ -13,14 +13,19 @@ class AccountApprovedMail extends Mailable
 {
     use Queueable, SerializesModels;
 
+    public string $loginUrl;
+
     public function __construct(public User $user)
     {
+        $frontendUrl = rtrim((string) env('FRONTEND_URL', 'http://localhost:5173'), '/');
+
+        $this->loginUrl = "{$frontendUrl}/login";
     }
 
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Your account was approved',
+            subject: 'Your NTI account was approved',
         );
     }
 

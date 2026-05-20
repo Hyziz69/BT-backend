@@ -26,7 +26,7 @@ Route::middleware('auth:api')->group(function () {
 
     Route::post('/program-a/invitations/accept', [TeamInvitationController::class, 'accept']);
 
-    Route::middleware('role:nti_admin')->prefix('admin')->group(function () {
+    Route::middleware('role:nti_admin,superadmin')->prefix('admin')->group(function () {
         Route::get('/dashboard', [AdminController::class, 'dashboard']);
 
         Route::get('/users', [AdminController::class, 'users']);
@@ -34,6 +34,7 @@ Route::middleware('auth:api')->group(function () {
         Route::patch('/users/{user}', [AdminController::class, 'updateUser']);
         Route::patch('/users/{user}/approve', [AdminController::class, 'approveUser']);
         Route::patch('/users/{user}/reject', [AdminController::class, 'rejectUser']);
+        Route::delete('/users/{user}', [AdminController::class, 'deleteUser']);
 
         Route::get('/calls', [AdminCallController::class, 'index']);
         Route::get('/calls/{call}', [AdminCallController::class, 'show']);

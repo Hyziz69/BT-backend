@@ -13,8 +13,13 @@ class AdminApprovalRequestMail extends Mailable
 {
     use Queueable, SerializesModels;
 
+    public string $adminUrl;
+
     public function __construct(public User $user)
     {
+        $frontendUrl = rtrim((string) env('FRONTEND_URL', 'http://localhost:5173'), '/');
+
+        $this->adminUrl = "{$frontendUrl}/admin";
     }
 
     public function envelope(): Envelope
