@@ -20,7 +20,7 @@ class TeamController extends Controller
     {
         $user = $request->user();
 
-        $teams = Team::with(['members.user', 'leader'])
+        $teams = Team::with(['members', 'leader'])
             ->whereHas('members', fn ($q) => $q->where('user_id', $user->id))
             ->get();
 
@@ -55,7 +55,7 @@ class TeamController extends Controller
 
         return response()->json([
             'message' => 'Team created successfully.',
-            'data'    => new TeamResource($team->load(['members.user', 'leader'])),
+            'data'    => new TeamResource($team->load(['members', 'leader'])),
         ], 201);
     }
 
@@ -64,7 +64,7 @@ class TeamController extends Controller
         $this->authorizeTeamAccess($request->user(), $team);
 
         return response()->json([
-            'data' => new TeamResource($team->load(['members.user', 'leader'])),
+            'data' => new TeamResource($team->load(['members', 'leader'])),
         ]);
     }
 
@@ -76,7 +76,7 @@ class TeamController extends Controller
 
         return response()->json([
             'message' => 'Team updated.',
-            'data'    => new TeamResource($team->load(['members.user', 'leader'])),
+            'data'    => new TeamResource($team->load(['members', 'leader'])),
         ]);
     }
 
@@ -104,7 +104,7 @@ class TeamController extends Controller
 
         return response()->json([
             'message' => 'Member added successfully.',
-            'data'    => new TeamResource($team->load(['members.user', 'leader'])),
+            'data'    => new TeamResource($team->load(['members', 'leader'])),
         ]);
     }
 
