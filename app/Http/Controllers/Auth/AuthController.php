@@ -7,6 +7,7 @@ use App\Mail\AdminApprovalRequestMail;
 use App\Mail\AccountApprovedMail;
 use App\Mail\AccountRejectedMail;
 use App\Models\User;
+use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -39,6 +40,8 @@ class AuthController extends Controller
             'gdpr_consented_at' => now(),
         ]);
 
+//        event(new Registered($user));
+
         $mailSent = true;
 
         try {
@@ -50,7 +53,7 @@ class AuthController extends Controller
                 ->values();
 
             foreach ($adminEmails as $email) {
-                Mail::to($email)->send(new AdminApprovalRequestMail($user));
+                Mail::to($email)->queue(new AdminApprovalRequestMail($user));
             }
         } catch (\Throwable $e) {
             $mailSent = false;

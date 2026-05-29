@@ -67,11 +67,23 @@ class DatabaseSeeder extends Seeder
             'account_type' => 'student',
             'status' => 'active',
         ]);
+        $user = User::factory(10)->create([
+            'password' => Hash::make('password'),
+            'account_type' => 'student',
+            'status' => 'active',
+        ]);
+        $user = User::factory(3)->create([
+            'password' => Hash::make('password'),
+            'account_type' => 'mentor',
+            'status' => 'active',
+        ]);
+
 
         $team = Team::create([
             'id' => \Illuminate\Support\Str::uuid(),
             'leader_id' => $leader->id,
             'name' => 'The Nitra Innovators',
+            'competences' => '[]'
         ]);
 
         \App\Models\TeamMember::create([

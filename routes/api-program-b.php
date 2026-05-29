@@ -29,6 +29,8 @@ Route::middleware('auth:api')->prefix('program-b')->name('program-b.')->group(fu
 
     // Applications
     Route::prefix('applications')->name('applications.')->group(function () {
+        Route::get('/', [ApplicationController::class, 'index'])->name('index');
+        Route::get('/{application}', [ApplicationController::class, 'show'])->name('show');
         Route::post('/', [ApplicationController::class, 'store'])->name('store');
         Route::post('/{application}/select', [ApplicationController::class, 'select'])->name('select');
         Route::post('/{application}/assign-mentor', [ApplicationController::class, 'assignMentor'])->name('assign-mentor');

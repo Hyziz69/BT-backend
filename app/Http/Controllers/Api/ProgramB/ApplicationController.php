@@ -16,6 +16,27 @@ use Illuminate\Support\Facades\Log;
 
 class ApplicationController extends Controller
 {
+    /**
+     * Получить список всех заявок.
+     */
+    public function index(Request $request): JsonResponse
+    {
+        // Загружаем заявки вместе со связанными данными для удобства фронтенда
+        $applications = Application::with(['team', 'challenge', 'call'])->get();
+
+        return response()->json($applications, 200);
+    }
+
+    /**
+     * Получить детальную информацию об одной заявке.
+     */
+    public function show(Application $application): JsonResponse
+    {
+        // Подгружаем связанные данные для конкретной заявки
+        $application->load(['team.members.profile', 'challenge', 'call']);
+
+        return response()->json($application, 200);
+    }
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -50,11 +71,11 @@ class ApplicationController extends Controller
         }
 
         // If anyone is missing a CV, block the application
-        if (count($missingCvs) > 0) {
-            return response()->json([
-                'message' => 'Nemožno podať prihlášku. Nasledujúci členovia nemajú vo svojom profile nahraté CV: ' . implode(', ', $missingCvs)
-            ], 422);
-        }
+//        if (count($missingCvs) > 0) {
+//            return response()->json([
+//                'message' => 'Nemožno podať prihlášku. Nasledujúci členovia nemajú vo svojom profile nahraté CV: ' . implode(', ', $missingCvs)
+//            ], 422);
+//        }
 
         $hasExistingApplication = DB::table('applications')->where('team_id', $team->id)->exists();
 

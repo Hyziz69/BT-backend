@@ -142,7 +142,7 @@ class AdminController extends Controller
         $mailSent = true;
 
         try {
-            Mail::to($user->email)->send(new AccountApprovedMail($user));
+            Mail::to($user->email)->queue(new AccountApprovedMail($user));
         } catch (\Throwable $e) {
             $mailSent = false;
 
@@ -180,7 +180,7 @@ class AdminController extends Controller
         $mailSent = true;
 
         try {
-            Mail::to($user->email)->send(new AccountRejectedMail($user));
+            Mail::to($user->email)->queue(new AccountRejectedMail($user));
         } catch (\Throwable $e) {
             $mailSent = false;
 
