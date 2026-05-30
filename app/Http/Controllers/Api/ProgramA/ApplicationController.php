@@ -115,7 +115,7 @@ class ApplicationController extends Controller
 
         return response()->json([
             'data' => new ApplicationResource(
-                $application->load(['team.members.user', 'call.program', 'documents', 'evaluations.evaluator', 'mentorships.mentor', 'milestones'])
+                $application->load(['team.members', 'call.program', 'documents', 'evaluations.evaluator', 'mentorships.mentor', 'milestones'])
             ),
         ]);
     }

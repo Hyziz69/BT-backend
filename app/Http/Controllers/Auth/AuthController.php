@@ -74,7 +74,7 @@ class AuthController extends Controller
         if ($user->status === 'suspended') {
             auth('api')->logout();
 
-            return response()->json(['message' => 'Your account was not approved.'], 403);
+            return response()->json(['message' => 'Your account has been rejected.'], 403);
         }
 
         return $this->respondWithToken($token, $user);

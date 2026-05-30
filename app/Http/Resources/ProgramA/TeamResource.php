@@ -15,13 +15,13 @@ class TeamResource extends JsonResource
                 'name'  => $this->leader->first_name . ' ' . $this->leader->last_name,
                 'email' => $this->leader->email,
             ],
-            'members'      => $this->whenLoaded('members', fn () =>
+            'members' => $this->whenLoaded('members', fn () =>
                 $this->members->map(fn ($m) => [
-                    'id'        => $m->user->id,
-                    'name'      => $m->user->first_name . ' ' . $m->user->last_name,
-                    'email'     => $m->user->email,
-                    'role'      => $m->role,
-                    'joined_at' => $m->joined_at,
+                    'id'        => $m->id,
+                    'name'      => $m->first_name . ' ' . $m->last_name,
+                    'email'     => $m->email,
+                    'role'      => $m->pivot->role,
+                    'joined_at' => $m->pivot->joined_at,
                 ])
             ),
             'member_count' => $this->members->count(),
