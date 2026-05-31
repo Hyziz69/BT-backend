@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\AuditAdminActions;
 use App\Http\Middleware\RoleMiddleware;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -29,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role'           => RoleMiddleware::class,
             'account.active' => \App\Http\Middleware\EnsureAccountIsActive::class,
+            'admin.audit'    => AuditAdminActions::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

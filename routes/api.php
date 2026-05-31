@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\AdminApplicationController;
+use App\Http\Controllers\Api\Admin\AdminAuditEventController;
 use App\Http\Controllers\Api\Admin\AdminCallController;
 use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Admin\AdminProgramController;
+use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProgramA\TeamInvitationController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\UserController;
@@ -14,20 +16,40 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/password/reset', [AuthController::class, 'forgotPassword']);
 Route::post('/password/reset/confirm', [AuthController::class, 'resetPassword']);
+
 Route::get('/program-a/invitations/{token}', [TeamInvitationController::class, 'preview']);
 
 Route::middleware('auth:api')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+
     Route::get('/users', [UserController::class, 'index']);
+
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
 
+    Route::get('/profile/overview', [ProfileController::class, 'overview']);
+    Route::patch('/profile/details', [ProfileController::class, 'updateDetails']);
+    Route::post('/profile/avatar', [ProfileController::class, 'updateAvatar']);
+    Route::delete('/profile/avatar', [ProfileController::class, 'deleteAvatar']);
+    Route::post('/profile/cv', [ProfileController::class, 'uploadCv']);
+    Route::delete('/profile/cv', [ProfileController::class, 'deleteCv']);
+    Route::patch('/profile/student-profile', [ProfileController::class, 'updateStudentProfile']);
+    Route::patch('/profile/password', [ProfileController::class, 'changePassword']);
+
+    Route::get('/users/{user}/profile', [ProfileController::class, 'publicProfile']);
+    Route::get('/users/{user}/profile-card', [ProfileController::class, 'profileCard']);
+
+    Route::patch('/user/password', [ProfileController::class, 'changePassword']);
+
     Route::post('/program-a/invitations/accept', [TeamInvitationController::class, 'accept']);
 
-    Route::middleware('role:nti_admin,superadmin')->prefix('admin')->group(function () {
+    Route::middleware(['role:nti_admin,superadmin', 'admin.audit'])->prefix('admin')->group(function () {
         Route::get('/dashboard', [AdminController::class, 'dashboard']);
+
+        Route::get('/audit-events', [AdminAuditEventController::class, 'index']);
+        Route::get('/audit-events/filters', [AdminAuditEventController::class, 'filters']);
 
         Route::get('/users', [AdminController::class, 'users']);
         Route::get('/users/{user}', [AdminController::class, 'showUser']);
@@ -59,4 +81,10 @@ Route::middleware(['auth:api', 'account.active'])->group(function () {
     Route::get('/program-a/teams/{team}/invitations', [TeamInvitationController::class, 'index']);
 });
 
-require __DIR__ . '/api-program-a.php';
+if (file_exists(__DIR__ . '/api-program-a.php')) {
+    require __DIR__ . '/api-program-a.php';
+}
+
+if (file_exists(__DIR__ . '/api-program-b.php')) {
+    require __DIR__ . '/api-program-b.php';
+}

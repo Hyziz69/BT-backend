@@ -3,10 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 use PHPOpenSourceSaver\JWTAuth\Contracts\JWTSubject;
 
@@ -19,6 +20,12 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
         'first_name',
         'last_name',
         'email',
+        'avatar_path',
+        'bio',
+        'phone',
+        'linkedin_url',
+        'github_url',
+        'portfolio_url',
         'password',
         'account_type',
         'status',
@@ -29,6 +36,11 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
     protected $hidden = [
         'password',
         'remember_token',
+    ];
+
+    protected $appends = [
+        'avatar_url',
+        'full_name',
     ];
 
     protected function casts(): array
@@ -43,7 +55,14 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
 
     public function getFullNameAttribute(): string
     {
-        return "{$this->first_name} {$this->last_name}";
+        return trim("{$this->first_name} {$this->last_name}");
+    }
+
+    public function getAvatarUrlAttribute(): ?string
+    {
+        return $this->avatar_path
+            ? asset(Storage::url($this->avatar_path))
+            : null;
     }
 
     public function company()
@@ -54,7 +73,7 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
     public function teams()
     {
         return $this->belongsToMany(Team::class, 'team_members')
-                    ->withPivot('role', 'joined_at');
+            ->withPivot('role', 'joined_at');
     }
 
     public function profile()
