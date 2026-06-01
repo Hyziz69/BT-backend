@@ -317,7 +317,7 @@ class TeamController extends Controller
         }
 
         return response()->json([
-            'team' => $team
+            'data' => $team
         ], 200);
     }
 
@@ -329,11 +329,18 @@ class TeamController extends Controller
         $allowedRoles = ['mentor', 'company_contact', 'editor', 'nti_admin', 'superadmin'];
         $hasElevatedPrivileges = in_array($user->account_type, $allowedRoles);
 
-        $teams = Team::with([
+        $query = Team::with([
             'leader:id,first_name,last_name,email',
             'members:id,first_name,last_name,email'
-        ])->paginate(15);
+        ]);
 
+        if (!$hasElevatedPrivileges) {
+            $query->whereHas('members', function ($q) use ($user) {
+                $q->where('users.id', $user->id);
+            });
+        }
+
+        $teams = $query->paginate(15);
 
         if (!$hasElevatedPrivileges) {
             $teams->getCollection()->transform(function ($team) use ($user) {

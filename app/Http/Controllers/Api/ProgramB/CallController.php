@@ -13,35 +13,28 @@ class CallController extends Controller
     /**
      * Возвращает список активных вызовов (Calls) для выбранной программы (Шаг 2).
      */
-    public function index(Request $request): JsonResponse
+    public function index(): JsonResponse
     {
-        $request->validate([
-            'program_id' => 'required|uuid|exists:programs,id',
-        ]);
+        $calls = Call::with('program')
+            ->whereHas('program', fn ($q) => $q->where('type', 'program_b'))
+            ->where('status', 'open')
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn ($call) => [
+                'id'                  => $call->id,
+                'title'               => $call->title,
+                'description'         => $call->description,
+                'status'              => $call->status,
+                'opens_at'            => $call->opens_at,
+                'closes_at'           => $call->closes_at,
+                'evaluation_criteria' => $call->evaluation_criteria ?? [],
+                'program'             => [
+                    'id'   => $call->program->id,
+                    'type' => $call->program->type,
+                    'name' => $call->program->name,
+                ],
+            ]);
 
-        try {
-            $calls = Call::query()
-                ->where('program_id', $request->query('program_id'))
-
-                ->where('status', 'open')
-                ->whereDate('opens_at', '<=', now())
-                ->whereDate('closes_at', '>=', now())
-                ->orderBy('closes_at', 'asc')
-                ->get([
-                    'id',
-                    'title',
-                    'description',
-                    'opens_at',
-                    'closes_at'
-                ]);
-
-            return response()->json([
-                'calls' => $calls
-            ], 200);
-
-        } catch (\Exception $e) {
-            Log::error('Chyba pri načítaní výziev (Calls): ' . $e->getMessage());
-            return response()->json(['message' => 'Vyskytla sa chyba servera pri načítaní výziev.'], 500);
-        }
+        return response()->json(['data' => $calls]);
     }
 }

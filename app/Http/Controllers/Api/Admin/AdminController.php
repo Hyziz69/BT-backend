@@ -203,9 +203,11 @@ class AdminController extends Controller
         $adminEmails = $this->getDeletionNotificationEmails($currentUser);
 
         try {
-            $user->delete();
-        } catch (QueryException $e) {
-            Log::error('User deletion failed.', [
+            Mail::to($user->email)->send(new AccountRejectedMail($user));
+        } catch (\Throwable $e) {
+            $mailSent = false;
+
+            Log::error('AccountRejectedMail failed', [
                 'user_id' => $user->id,
                 'email' => $user->email,
                 'error' => $e->getMessage(),

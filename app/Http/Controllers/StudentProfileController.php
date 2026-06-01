@@ -22,7 +22,7 @@ class StudentProfileController extends Controller
                 'study_program'       => null,
                 'study_year'          => null,
                 'skills'              => [],
-                'cv_url'              => null,
+                'cv_path'              => null,
                 'academic_declaration'=> false,
             ]
         );
@@ -58,13 +58,13 @@ class StudentProfileController extends Controller
         // Handle the physical file upload if it exists in the request
         if ($request->hasFile('cv_file')) {
             // Clean up old file from storage to save space
-            if ($profile->cv_url) {
-                Storage::disk('public')->delete($profile->cv_url);
+            if ($profile->cv_path) {
+                Storage::disk('public')->delete($profile->cv_path);
             }
 
             // Store new file in 'public/cvs' directory
             $path = $request->file('cv_file')->store('cvs', 'public');
-            $validated['cv_url'] = $path;
+            $validated['cv_path'] = $path;
         }
 
         // Remove the helper 'cv_file' field before saving to DB
@@ -90,7 +90,7 @@ class StudentProfileController extends Controller
             'study_program'        => $profile->study_program,
             'study_year'           => $profile->study_year,
             'skills'               => $profile->skills ?? [],
-            'cv_url'               => $profile->cv_url,
+            'cv_path'               => $profile->cv_path,
             'academic_declaration' => $profile->academic_declaration,
             'academic_notes'       => $profile->academic_notes,
         ];

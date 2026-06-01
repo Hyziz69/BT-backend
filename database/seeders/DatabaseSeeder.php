@@ -68,10 +68,40 @@ class DatabaseSeeder extends Seeder
             'status' => 'active',
         ]);
 
+        \App\Models\StudentProfile::create([
+            'user_id' => $leader->id,
+            'cv_path' => 'dummy/cv_leader_' . $leader->id . '.pdf',
+            'study_program' => 'Aplikovaná informatika',
+            'study_year' => 3,
+        ]);
+
+        $students = User::factory(6)->create([
+            'password' => Hash::make('password'),
+            'account_type' => 'student',
+            'status' => 'active',
+        ]);
+
+        foreach ($students as $student) {
+            \App\Models\StudentProfile::create([
+                'user_id' => $student->id,
+                'cv_path' => 'dummy/cv_student_' . $student->id . '.pdf',
+                'study_program' => 'Aplikovaná informatika',
+                'study_year' => 2,
+            ]);
+        }
+
+        $mentors = User::factory(3)->create([
+            'password' => Hash::make('password'),
+            'account_type' => 'mentor',
+            'status' => 'active',
+        ]);
+
+
         $team = Team::create([
             'id' => \Illuminate\Support\Str::uuid(),
             'leader_id' => $leader->id,
             'name' => 'The Nitra Innovators',
+            'competencies' => '[]'
         ]);
 
         \App\Models\TeamMember::create([
