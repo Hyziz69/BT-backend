@@ -16,6 +16,20 @@ use Illuminate\Support\Facades\Log;
 
 class ApplicationController extends Controller
 {
+    private const ALLOWED_TRANSITIONS = [
+        'draft'              => ['submitted'],
+        'submitted'          => ['formally_verified', 'pending_supplement', 'rejected'],
+        'pending_supplement' => ['submitted'],
+        'formally_verified'  => ['in_evaluation', 'approved', 'rejected'],
+        'in_evaluation'      => ['approved', 'rejected'],
+        'approved'           => ['onboarding', 'archived'],
+        'onboarding'         => ['active', 'paused', 'archived'],
+        'active'             => ['completed', 'paused', 'archived'],
+        'paused'             => ['active', 'archived'],
+        'completed'          => ['archived'],
+        'rejected'           => ['archived'],
+        'archived'           => []
+    ];
     /**
      * Получить список всех заявок.
      */
@@ -33,7 +47,11 @@ class ApplicationController extends Controller
     public function show(Application $application): JsonResponse
     {
         // Подгружаем связанные данные для конкретной заявки
-        $application->load(['team.members.profile', 'challenge', 'call']);
+        $application->load(['team.members.profile', 'challenge', 'call', 'mentorships.mentor',]);
+        $application->setAttribute(
+            'available_transitions',
+            self::ALLOWED_TRANSITIONS[$application->status] ?? []
+        );
 
         return response()->json($application, 200);
     }
@@ -65,17 +83,17 @@ class ApplicationController extends Controller
         $missingCvs = [];
         foreach ($team->members as $member) {
             // Check if profile exists and if cv_url is filled
-            if (!$member->profile || empty($member->profile->cv_url)) {
+            if (!$member->profile || empty($member->profile->cv_path)) {
                 $missingCvs[] = $member->first_name . ' ' . $member->last_name;
             }
         }
 
-        // If anyone is missing a CV, block the application
-//        if (count($missingCvs) > 0) {
-//            return response()->json([
-//                'message' => 'Nemožno podať prihlášku. Nasledujúci členovia nemajú vo svojom profile nahraté CV: ' . implode(', ', $missingCvs)
-//            ], 422);
-//        }
+//         If anyone is missing a CV, block the application
+        if (count($missingCvs) > 0) {
+            return response()->json([
+                'message' => 'Nemožno podať prihlášku. Nasledujúci členovia nemajú vo svojom profile nahraté CV: ' . implode(', ', $missingCvs)
+            ], 422);
+        }
 
         $hasExistingApplication = DB::table('applications')->where('team_id', $team->id)->exists();
 
@@ -93,8 +111,7 @@ class ApplicationController extends Controller
                 'challenge_id'      => $validated['challenge_id'],
                 'motivation_letter' => $validated['motivation_letter'] ?? null,
                 'solution_proposal' => $validated['solution_proposal'] ?? null,
-                'status'            => 'submitted',
-                'submitted_at'      => now(),
+                'status'            => 'draft',
             ]);
 
             return response()->json([
@@ -256,5 +273,80 @@ class ApplicationController extends Controller
             Log::error('Approve delivery error: ' . $e->getMessage());
             return response()->json(['message' => 'Vyskytla sa chyba pri uzatváraní projektu.'], 500);
         }
+    }
+    public function transition(Request $request, Application $application): JsonResponse
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'status'         => 'required|string|in:draft,submitted,formally_verified,in_evaluation,pending_supplement,approved,rejected,onboarding,active,paused,completed,archived',
+            'decision_notes' => 'nullable|string',
+            'score'          => 'nullable|numeric|min:0|max:100',
+        ]);
+
+        $newStatus = $validated['status'];
+        $currentStatus = $application->status;
+        $allowed = self::ALLOWED_TRANSITIONS[$currentStatus] ?? [];
+        $isAdmin = in_array($user->account_type, ['nti_admin', 'superadmin']);
+
+        if (!in_array($newStatus, $allowed)) {
+            return response()->json([
+                'message' => "Neregulárny prechod zo stavu '{$currentStatus}' do stavu '{$newStatus}'."
+            ], 422);
+        }
+
+        if ($newStatus === 'submitted') {
+            if (!$isAdmin && $application->team->leader_id !== $user->id) {
+                return response()->json(['message' => 'Iba líder tímu môže podať prihlášku.'], 403);
+            }
+
+            $missingCvs = [];
+            $application->loadMissing('team.members.profile');
+
+            foreach ($application->team->members as $member) {
+                if (!$member->profile || empty($member->profile->cv_path)) {
+                    $missingCvs[] = $member->first_name . ' ' . $member->last_name;
+                }
+            }
+
+            if (!empty($missingCvs)) {
+                return response()->json([
+                    'message' => 'Nemožno podať prihlášku. Nasledujúci členovia nemajú vo svojom profile nahraté CV: ' . implode(', ', $missingCvs)
+                ], 422);
+            }
+
+            $application->submitted_at = now();
+        } else {
+            if (!$isAdmin) {
+                return response()->json(['message' => 'Nedostatočné oprávnenia pre tento prechod stavu.'], 403);
+            }
+
+            if (array_key_exists('decision_notes', $validated)) {
+                $application->decision_notes = $validated['decision_notes'];
+            }
+
+            if (in_array($newStatus, ['approved', 'rejected'])) {
+                $application->score = $validated['score'] ?? null;
+                $application->decided_at = now();
+            }
+        }
+
+        $application->status = $newStatus;
+        $application->save();
+
+        $application->load([
+            'team.members.profile',
+            'call.program',
+            'challenge',
+            'milestones',
+            'mentorships.mentor'
+        ]);
+
+        $application->setAttribute(
+            'available_transitions',
+            self::ALLOWED_TRANSITIONS[$application->status] ?? []
+        );
+
+        return response()->json($application, 200);
     }
 }

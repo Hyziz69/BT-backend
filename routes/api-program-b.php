@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\ProgramB\ApplicationController;
 use App\Http\Controllers\Api\ProgramB\CallController;
 use App\Http\Controllers\Api\ProgramB\CompanyChallengeController;
 use App\Http\Controllers\Api\ProgramB\CompanyController;
+use App\Http\Controllers\Api\ProgramB\MentorshipController;
 use App\Http\Controllers\Api\ProgramB\ProgramController;
 use App\Http\Controllers\Api\ProgramB\TeamController;
 use App\Http\Controllers\StudentProfileController;
@@ -33,9 +34,18 @@ Route::middleware('auth:api')->prefix('program-b')->name('program-b.')->group(fu
         Route::get('/{application}', [ApplicationController::class, 'show'])->name('show');
         Route::post('/', [ApplicationController::class, 'store'])->name('store');
         Route::post('/{application}/select', [ApplicationController::class, 'select'])->name('select');
-        Route::post('/{application}/assign-mentor', [ApplicationController::class, 'assignMentor'])->name('assign-mentor');
+//        Route::post('/{application}/assign-mentor', [ApplicationController::class, 'assignMentor'])->name('assign-mentor');
         Route::post('/{application}/assign-po', [ApplicationController::class, 'assignPo'])->name('assign-po');
         Route::post('/{application}/approve-delivery', [ApplicationController::class, 'approveDelivery'])->name('approve-delivery');
+        Route::patch('/{application}/transition', [ApplicationController::class, 'transition'])
+            ->name('transition');
+    });
+
+    //Mentorship
+    Route::prefix('applications/{application}/mentorships')->name('applications.mentorships.')->group(function () {
+        Route::get('/', [MentorshipController::class, 'index'])->name('index');
+        Route::post('/', [MentorshipController::class, 'store'])->name('store');
+        Route::patch('/{mentorship}/end', [MentorshipController::class, 'end'])->name('end');
     });
 
     // Companies

@@ -12,7 +12,7 @@ class StudentProfile extends Model
 
     protected $fillable = [
         'user_id', 'study_program', 'study_year', 'skills',
-        'cv_url', 'academic_declaration', 'academic_notes',
+        'cv_path', 'academic_declaration', 'academic_notes',
     ];
 
     protected $casts = [
