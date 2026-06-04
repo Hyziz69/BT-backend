@@ -190,7 +190,7 @@ class DocumentController extends Controller
 
     private function authorizeAccess($user, Application $application): void
     {
-        if (in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator', 'mentor'])) {
+        if (in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator', 'mentor', 'company_contact'])) {
             return;
         }
 
@@ -204,6 +204,10 @@ class DocumentController extends Controller
     {
         if (in_array($user->account_type, ['nti_admin', 'superadmin'])) {
             return;
+        }
+
+        if ($user->account_type === 'company_contact') {
+            abort(403, 'Company representatives cannot upload documents.');
         }
 
         $isLeader = $application->team->leader_id === $user->id;

@@ -46,6 +46,8 @@ class ApplicationController extends Controller
 
         if ($user->account_type === 'student') {
             $query->whereHas('team.members', fn ($q) => $q->where('user_id', $user->id));
+        } elseif ($user->account_type === 'company_contact') {
+            $query->whereNotIn('status', ['draft', 'pending_supplement']);
         }
 
         if ($request->filled('status')) {
@@ -217,7 +219,7 @@ class ApplicationController extends Controller
 
     private function authorizeView($user, Application $application): void
     {
-        if (in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator', 'mentor'])) {
+        if (in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator', 'mentor', 'company_contact'])) {
             return;
         }
 

@@ -103,7 +103,11 @@ public function show(Application $application): JsonResponse
             ], 422);
         }
 
-        $hasExistingApplication = DB::table('applications')->where('team_id', $team->id)->exists();
+        $hasExistingApplication = DB::table('applications')
+            ->where('team_id', $team->id)
+            ->where('challenge_id', $validated['challenge_id'])
+            ->whereNotIn('status', ['rejected', 'archived'])
+            ->exists();
 
         if ($hasExistingApplication) {
             return response()->json([

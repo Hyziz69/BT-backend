@@ -75,13 +75,13 @@ class EvaluationController extends Controller
 
     private function authorizeAccess($user, Application $application): void
     {
-        if (in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator'])) {
+        if (in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator', 'mentor', 'company_contact'])) {
             return;
         }
 
         $isMember = $application->team->members()->where('user_id', $user->id)->exists();
         if (!$isMember) {
-            abort(403, 'Access denied.');
+            abort(403, 'You do not have access to this application\'s documents.');
         }
     }
 }
