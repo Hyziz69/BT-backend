@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\Log;
 
 class ApplicationController extends Controller
 {
-    private const ALLOWED_TRANSITIONS = [
+
+private const ALLOWED_TRANSITIONS = [
         'draft'              => ['submitted'],
         'submitted'          => ['formally_verified', 'pending_supplement', 'rejected'],
         'pending_supplement' => ['submitted'],
@@ -30,31 +31,38 @@ class ApplicationController extends Controller
         'rejected'           => ['archived'],
         'archived'           => []
     ];
-    /**
-     * Получить список всех заявок.
-     */
-    public function index(Request $request): JsonResponse
-    {
-        // Загружаем заявки вместе со связанными данными для удобства фронтенда
-        $applications = Application::with(['team', 'challenge', 'call'])->get();
-
-        return response()->json($applications, 200);
-    }
 
     /**
-     * Получить детальную информацию об одной заявке.
-     */
-    public function show(Application $application): JsonResponse
-    {
-        // Подгружаем связанные данные для конкретной заявки
-        $application->load(['team.members.profile', 'challenge', 'call', 'mentorships.mentor',]);
-        $application->setAttribute(
-            'available_transitions',
-            self::ALLOWED_TRANSITIONS[$application->status] ?? []
-        );
+ * STUDENT VIEW: the current user's own Program B applications.
+ */
+public function index(Request $request): JsonResponse
+{
+    $user = $request->user();
 
-        return response()->json($application, 200);
-    }
+    $teamIds = DB::table('team_members')
+        ->where('user_id', $user->id)
+        ->pluck('team_id');
+
+    $applications = Application::whereIn('team_id', $teamIds)
+        ->whereNotNull('challenge_id')
+        ->with(['challenge:id,title,status,company_id,budget', 'challenge.company:id,name', 'team:id,name'])
+        ->orderByDesc('created_at')
+        ->get();
+
+    return response()->json(['applications' => $applications], 200);
+}
+
+public function show(Application $application): JsonResponse
+{
+    $application->load(['team.members.profile', 'challenge', 'call', 'mentorships.mentor']);
+    $application->setAttribute(
+        'available_transitions',
+        self::ALLOWED_TRANSITIONS[$application->status] ?? []
+    );
+
+    return response()->json($application, 200);
+}
+
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -125,16 +133,29 @@ class ApplicationController extends Controller
         }
     }
     /**
-     * ADMIN/COMPANY ACTION: Select a team for a challenge.
+     * Ensure the acting user may manage the company that owns this
+     * application's challenge. NTI admins bypass via CompanyPolicy::before().
+     */
+    private function authorizeCompanyAction(Request $request, Application $application): ?JsonResponse
+    {
+        $company = $application->challenge?->company;
+
+        if (!$company || $request->user()->cannot('manageChallenges', $company)) {
+            return response()->json(['message' => 'Nemáte oprávnenie vykonať túto akciu.'], 403);
+        }
+
+        return null;
+    }
+
+    /**
+     * COMPANY ACTION: Select a team for a challenge.
      */
     public function select(Request $request, Application $application): JsonResponse
     {
-        $user = $request->user();
-        $isAdmin = $user->account_type === 'nti_admin';
-
-        if (!$isAdmin) {
-            return response()->json(['message' => 'Nemáte oprávnenie schvalit ziadost.'], 403);
+        if ($denied = $this->authorizeCompanyAction($request, $application)) {
+            return $denied;
         }
+
         if ($application->status !== 'submitted') {
             return response()->json(['message' => 'Túto prihlášku už nie je možné upravovať.'], 422);
         }
@@ -210,17 +231,25 @@ class ApplicationController extends Controller
      */
     public function assignPo(Request $request, Application $application): JsonResponse
     {
-        $user = $request->user();
-        $isAdmin = $user->account_type === 'nti_admin';
-
-        if (!$isAdmin) {
-            return response()->json(['message' => 'Nemáte oprávnenie pridat product ownera.'], 403);
+        if ($denied = $this->authorizeCompanyAction($request, $application)) {
+            return $denied;
         }
 
         $validated = $request->validate(['product_owner_id' => 'required|uuid|exists:users,id']);
 
+        $challenge = $application->challenge;
+        if (!$challenge) {
+            return response()->json(['message' => 'K prihláške nie je priradená žiadna výzva.'], 422);
+        }
+
+        // The Product Owner must be a member of the challenge's own company.
+        $po = User::find($validated['product_owner_id']);
+        if (!$po || $po->company_id !== $challenge->company_id) {
+            return response()->json(['message' => 'Product Owner musí byť členom vašej spoločnosti.'], 422);
+        }
+
         try {
-            $application->update(['product_owner_id' => $validated['product_owner_id']]);
+            $challenge->update(['product_owner_id' => $validated['product_owner_id']]);
             return response()->json(['message' => 'Product Owner assigned.'], 200);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Error.'], 500);
@@ -232,10 +261,8 @@ class ApplicationController extends Controller
      */
     public function approveDelivery(Request $request, Application $application): JsonResponse
     {
-        $user = $request->user();
-        $isAdmin = $user->account_type === 'nti_admin';
-        if (!$isAdmin) {
-            return response()->json(['message' => 'Nemáte oprávnenie schváliť tento projekt.'], 403);
+        if ($denied = $this->authorizeCompanyAction($request, $application)) {
+            return $denied;
         }
 
         if ($application->status === 'archived') {

@@ -17,8 +17,9 @@ class ProgramController extends Controller
     {
         try {
             $programs = Program::where('is_active', 1)
+                ->where('type', 'program_b')
                 ->orderBy('created_at', 'desc')
-                ->get(['type','name', 'description']);
+                ->get(['id', 'type', 'name', 'description']);
 
             return response()->json([
                 'programs' => $programs

@@ -11,24 +11,40 @@ use Illuminate\Support\Facades\Log;
 class CompanyChallengeController extends Controller
 {
     /**
-     * PUBLIC VIEW (Students): List challenges for a specific call.
+     * Role-aware listing:
+     *  - Company managers/owners see ALL of their own company's challenges
+     *    (drafts included) with a count of pending candidate teams.
+     *  - Students / public see only published or matching challenges.
      */
     public function index(Request $request): JsonResponse
     {
-//        $request->validate([
-//            'call_id' => 'required|uuid|exists:calls,id',
-//        ]);
+        $user = $request->user();
 
         try {
+            if ($user->belongsToCompany() && $user->isCompanyManager()) {
+                $challenges = CompanyChallenge::query()
+                    ->where('company_id', $user->company_id)
+                    ->withCount(['applications as candidates_count' => function ($q) {
+                        $q->where('status', 'submitted');
+                    }])
+                    ->orderBy('created_at', 'desc')
+                    ->get();
+
+                return response()->json([
+                    'challenges' => $challenges
+                ], 200);
+            }
+
+            // CRITICAL: Students should only see published or active challenges, not drafts!
             $challenges = CompanyChallenge::query()
-//                ->where('call_id', $request->query('call_id'))
-                // CRITICAL: Students should only see published or active challenges, not drafts!
-                ->whereIn('status', ['published', 'in_pairing'])
+                ->whereIn('status', ['published', 'matching'])
                 ->orderBy('created_at', 'desc')
                 ->get([
                     'id',
                     'title',
-                    'status' // helpful for frontend
+                    'status',
+                    'company_id',
+                    'budget',
                 ]);
 
             return response()->json([
@@ -39,6 +55,26 @@ class CompanyChallengeController extends Controller
             Log::error('Failed to load challenges: ' . $e->getMessage());
             return response()->json(['message' => 'Server error occurred while loading challenges.'], 500);
         }
+    }
+
+    /**
+     * COMPANY ACTION: List the candidate teams (applications) for a challenge.
+     */
+    public function applications(Request $request, CompanyChallenge $challenge): JsonResponse
+    {
+        if ($denied = $this->authorizeChallenge($request, $challenge)) {
+            return $denied;
+        }
+
+        $applications = $challenge->applications()
+            ->with(['team.members.profile'])
+            ->orderByRaw("CASE status WHEN 'submitted' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END")
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'applications' => $applications
+        ], 200);
     }
 
     /**
@@ -56,18 +92,30 @@ class CompanyChallengeController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        // Validate incoming payload. Product owner is probably a user from the company
+        $user = $request->user();
+
+        // The challenge is always created on behalf of the user's own company.
+        if (!$user->belongsToCompany()) {
+            return response()->json(['message' => 'Nie ste priradený k žiadnej spoločnosti.'], 422);
+        }
+
+        $company = $user->company;
+
+        if ($user->cannot('manageChallenges', $company)) {
+            return response()->json(['message' => 'Nemáte oprávnenie vytvárať výzvy pre túto spoločnosť.'], 403);
+        }
+
         $validated = $request->validate([
             'title'            => 'required|string|max:255',
             'technical_spec'   => 'required|string',
-            'call_id'          => 'nullable',
-            'company_id'       => 'nullable',
+            'call_id'          => 'nullable|uuid|exists:calls,id',
             'budget'           => 'nullable|numeric|min:0',
-//            'product_owner_id' => 'required|uuid|exists:users,id', // Make sure users table uses UUIDs
-            // TODO: later we might need to automatically append 'company_id' based on the logged-in user
+            'product_owner_id' => 'nullable|uuid|exists:users,id',
         ]);
 
         try {
+            // company_id comes from the authenticated user, never from the client.
+            $validated['company_id'] = $company->id;
             // New challenges should always start as drafts
             $validated['status'] = 'draft';
 
@@ -86,10 +134,28 @@ class CompanyChallengeController extends Controller
     }
 
     /**
+     * Ensure the acting user may manage the given challenge's company.
+     */
+    private function authorizeChallenge(Request $request, CompanyChallenge $challenge): ?JsonResponse
+    {
+        $company = $challenge->company;
+
+        if (!$company || $request->user()->cannot('manageChallenges', $company)) {
+            return response()->json(['message' => 'Nemáte oprávnenie upravovať túto výzvu.'], 403);
+        }
+
+        return null;
+    }
+
+    /**
      * COMPANY ACTION: Update a challenge.
      */
     public function update(Request $request, CompanyChallenge $challenge): JsonResponse
     {
+        if ($denied = $this->authorizeChallenge($request, $challenge)) {
+            return $denied;
+        }
+
         // Using 'sometimes' so frontend can patch only the edited fields
         $validated = $request->validate([
             'title'            => 'sometimes|required|string|max:255',
@@ -117,9 +183,13 @@ class CompanyChallengeController extends Controller
      */
     public function updateStatus(Request $request, CompanyChallenge $challenge): JsonResponse
     {
-        // Strictly validate against the workflow states defined in the specs
+        if ($denied = $this->authorizeChallenge($request, $challenge)) {
+            return $denied;
+        }
+
+        // Strictly validate against the workflow states defined in the migration enum
         $validated = $request->validate([
-            'status' => 'required|in:draft,published,in_pairing,assigned,closed'
+            'status' => 'required|in:draft,published,matching,assigned,in_progress,closed'
         ]);
 
         try {
