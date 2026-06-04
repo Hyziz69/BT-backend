@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\ProgramB\ApplicationController;
 use App\Http\Controllers\Api\ProgramB\CallController;
 use App\Http\Controllers\Api\ProgramB\CompanyChallengeController;
 use App\Http\Controllers\Api\ProgramB\CompanyController;
+use App\Http\Controllers\Api\ProgramB\CompanyMemberController;
 use App\Http\Controllers\Api\ProgramB\ProgramController;
 use App\Http\Controllers\Api\ProgramB\TeamController;
 use App\Http\Controllers\StudentProfileController;
@@ -29,6 +30,7 @@ Route::middleware('auth:api')->prefix('program-b')->name('program-b.')->group(fu
 
     // Applications
     Route::prefix('applications')->name('applications.')->group(function () {
+        Route::get('/', [ApplicationController::class, 'index'])->name('index');
         Route::post('/', [ApplicationController::class, 'store'])->name('store');
         Route::post('/{application}/select', [ApplicationController::class, 'select'])->name('select');
         Route::post('/{application}/assign-mentor', [ApplicationController::class, 'assignMentor'])->name('assign-mentor');
@@ -41,12 +43,20 @@ Route::middleware('auth:api')->prefix('program-b')->name('program-b.')->group(fu
         Route::post('/register', [CompanyController::class, 'register'])->name('register');
         Route::get('/{company}', [CompanyController::class, 'show'])->name('show');
         Route::put('/{company}', [CompanyController::class, 'update'])->name('update');
+
+        // Member management (owner-driven)
+        Route::get('/{company}/members', [CompanyMemberController::class, 'index'])->name('members.index');
+        Route::post('/{company}/members/invite', [CompanyMemberController::class, 'invite'])->name('members.invite');
+        Route::post('/{company}/members/leave', [CompanyMemberController::class, 'leave'])->name('members.leave');
+        Route::patch('/{company}/members/{user}', [CompanyMemberController::class, 'updateRole'])->name('members.update');
+        Route::delete('/{company}/members/{user}', [CompanyMemberController::class, 'kick'])->name('members.kick');
     });
 
     // Company Challenges
     Route::prefix('challenges')->name('challenges.')->group(function () {
         Route::get('/', [CompanyChallengeController::class, 'index'])->name('index');
         Route::post('/', [CompanyChallengeController::class, 'store'])->name('store');
+        Route::get('/{challenge}/applications', [CompanyChallengeController::class, 'applications'])->name('applications');
         Route::get('/{challenge}', [CompanyChallengeController::class, 'show'])->name('show');
         Route::put('/{challenge}', [CompanyChallengeController::class, 'update'])->name('update');
         Route::patch('/{challenge}/status', [CompanyChallengeController::class, 'updateStatus'])->name('status.update');

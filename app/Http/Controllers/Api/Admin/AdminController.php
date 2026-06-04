@@ -7,6 +7,7 @@ use App\Mail\AccountApprovedMail;
 use App\Mail\AccountRejectedMail;
 use App\Models\Application;
 use App\Models\Call;
+use App\Models\CompanyInvitation;
 use App\Models\Program;
 use App\Models\User;
 use Illuminate\Database\QueryException;
@@ -140,6 +141,8 @@ class AdminController extends Controller
             'status' => 'active',
         ]);
 
+        $this->resolvePendingCompanyInvitations($user->fresh());
+
         $mailSent = $this->sendAccountApprovedMail($user->fresh());
 
         return response()->json([
@@ -149,6 +152,33 @@ class AdminController extends Controller
             'mail_sent' => $mailSent,
             'user' => $this->userPayload($user->fresh()),
         ]);
+    }
+
+    /**
+     * When a company representative is approved, finish any company invitation they
+     * accepted while still pending (registered_user_id was stored at accept time).
+     */
+    private function resolvePendingCompanyInvitations(User $user): void
+    {
+        if ($user->account_type !== 'company_contact' || $user->belongsToCompany()) {
+            return;
+        }
+
+        $invitation = CompanyInvitation::where('registered_user_id', $user->id)
+            ->pending()
+            ->latest()
+            ->first();
+
+        if (!$invitation) {
+            return;
+        }
+
+        $user->update([
+            'company_id'   => $invitation->company_id,
+            'company_role' => $invitation->role,
+        ]);
+
+        $invitation->update(['status' => 'accepted']);
     }
 
     public function rejectUser(User $user): JsonResponse

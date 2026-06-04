@@ -22,7 +22,8 @@ return new class extends Migration
         });
 
         // Add unique constraint only if it doesn't exist
-        if (!collect(\DB::select("SHOW INDEX FROM teams WHERE Key_name = 'teams_invite_code_unique'"))->count()) {
+        $hasIndex = collect(\DB::select("SELECT name FROM sqlite_master WHERE type='index' AND name='teams_invite_code_unique'"))->count();
+        if (!$hasIndex) {
             Schema::table('teams', function (Blueprint $table) {
                 $table->unique('invite_code');
             });

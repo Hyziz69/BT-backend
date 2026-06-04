@@ -17,6 +17,7 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
 
     protected $fillable = [
         'company_id',
+        'company_role',
         'first_name',
         'last_name',
         'email',
@@ -68,6 +69,25 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
     public function company()
     {
         return $this->belongsTo(Company::class);
+    }
+
+    /**
+     * Whether the user is part of a company's management structure.
+     */
+    public function belongsToCompany(): bool
+    {
+        return !is_null($this->company_id);
+    }
+
+    public function isCompanyOwner(): bool
+    {
+        return $this->company_role === 'owner';
+    }
+
+    public function isCompanyManager(): bool
+    {
+        // Owners implicitly have all manager privileges.
+        return in_array($this->company_role, ['owner', 'manager'], true);
     }
 
     public function teams()

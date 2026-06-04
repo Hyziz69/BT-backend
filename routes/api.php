@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Admin\AdminProgramController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProgramA\TeamInvitationController;
+use App\Http\Controllers\Api\ProgramB\CompanyMemberController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\UserController;
 use Illuminate\Http\Request;
@@ -18,6 +19,7 @@ Route::post('/password/reset', [AuthController::class, 'forgotPassword']);
 Route::post('/password/reset/confirm', [AuthController::class, 'resetPassword']);
 
 Route::get('/program-a/invitations/{token}', [TeamInvitationController::class, 'preview']);
+Route::get('/program-b/companies/invitations/{token}', [CompanyMemberController::class, 'preview']);
 
 Route::middleware('auth:api')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -44,6 +46,7 @@ Route::middleware('auth:api')->group(function () {
     Route::patch('/user/password', [ProfileController::class, 'changePassword']);
 
     Route::post('/program-a/invitations/accept', [TeamInvitationController::class, 'accept']);
+    Route::post('/program-b/companies/invitations/accept', [CompanyMemberController::class, 'accept']);
 
     Route::middleware(['role:nti_admin,superadmin', 'admin.audit'])->prefix('admin')->group(function () {
         Route::get('/dashboard', [AdminController::class, 'dashboard']);
