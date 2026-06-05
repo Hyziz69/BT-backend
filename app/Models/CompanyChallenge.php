@@ -44,4 +44,9 @@ class CompanyChallenge extends Model
     {
         return $this->hasMany(Application::class, 'challenge_id');
     }
+
+    public function selectedTeam()
+    {
+        return $this->belongsTo(Team::class, 'team_id');
+    }
 }

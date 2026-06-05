@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\ProgramB;
 
 use App\Http\Controllers\Controller;
 use App\Models\CompanyChallenge;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
@@ -78,13 +79,65 @@ class CompanyChallengeController extends Controller
     }
 
     /**
-     * PUBLIC VIEW (Students): Show details of a single challenge.
+     * Show details of a single challenge (role-aware).
+     *  - Owning-company managers get full data and can_manage = true.
+     *  - Drafts are hidden from everyone except those managers.
      */
-    public function show(CompanyChallenge $challenge): JsonResponse
+    public function show(Request $request, CompanyChallenge $challenge): JsonResponse
     {
-        return response()->json([
-            'challenge' => $challenge
-        ], 200);
+        $user = $request->user();
+        $canManage = (bool) ($challenge->company && $user->can('manageChallenges', $challenge->company));
+
+        if ($challenge->status === 'draft' && !$canManage) {
+            return response()->json(['message' => 'Výzva nie je dostupná.'], 403);
+        }
+
+        $challenge->load([
+            'company:id,name',
+            'productOwner:id,first_name,last_name',
+            'call:id,title',
+            'selectedTeam:id,name',
+        ]);
+        $challenge->loadCount(['applications as candidates_count' => function ($q) {
+            $q->where('status', 'submitted');
+        }]);
+
+        $payload = [
+            'challenge' => $challenge,
+            'can_manage' => $canManage,
+        ];
+
+        if ($canManage) {
+            $isAdmin = in_array($user->account_type, ['nti_admin', 'superadmin'], true);
+
+            // Eligible Product Owners = members of the challenge's own company.
+            $payload['po_candidates'] = User::where('company_id', $challenge->company_id)
+                ->orderBy('first_name')
+                ->get(['id', 'first_name', 'last_name']);
+
+            // The already-selected team's application (if any), with its mentor.
+            $approved = $challenge->applications()
+                ->where('status', 'approved')
+                ->with(['mentorships.mentor:id,first_name,last_name'])
+                ->first();
+
+            if ($approved) {
+                $payload['assigned_application_id'] = $approved->id;
+                $mentor = optional($approved->mentorships->first())->mentor;
+                $payload['current_mentor'] = $mentor
+                    ? ['id' => $mentor->id, 'name' => trim($mentor->first_name . ' ' . $mentor->last_name)]
+                    : null;
+            }
+
+            // Mentor assignment is an NTI-admin action.
+            if ($isAdmin) {
+                $payload['mentor_candidates'] = User::where('account_type', 'mentor')
+                    ->orderBy('first_name')
+                    ->get(['id', 'first_name', 'last_name']);
+            }
+        }
+
+        return response()->json($payload, 200);
     }
 
     /**

@@ -180,7 +180,7 @@ class ApplicationController extends Controller
     public function assignMentor(Request $request, Application $application): JsonResponse
     {
         $user = $request->user();
-        $isAdmin = $user->account_type === 'nti_admin';
+        $isAdmin = in_array($user->account_type, ['nti_admin', 'superadmin'], true);
 
         if (!$isAdmin) {
             return response()->json(['message' => 'Nemáte oprávnenie pridat mentora.'], 403);

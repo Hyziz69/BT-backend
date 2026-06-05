@@ -43,7 +43,13 @@ class ApplicationController extends Controller
         $query = Application::with(['team', 'call.program', 'documents', 'evaluations'])
             ->whereHas('call.program', fn ($q) => $q->where('type', 'program_a'));
 
-        if ($user->account_type === 'student') {
+        // Keep the list consistent with authorizeView(): only privileged roles
+        // (admins, evaluators, mentors) may browse every application. Everyone
+        // else — students, company contacts, etc. — sees only applications of
+        // teams they belong to (which is none for non-team users), so the list
+        // never shows rows the detail view would then forbid with a 403.
+        $privileged = in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator', 'mentor'], true);
+        if (!$privileged) {
             $query->whereHas('team.members', fn ($q) => $q->where('user_id', $user->id));
         }
 
