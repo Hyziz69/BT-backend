@@ -139,7 +139,7 @@ class TeamController extends Controller
 
     private function authorizeTeamAccess(User $user, Team $team): void
     {
-        if (in_array($user->account_type, ['nti_admin', 'superadmin'])) {
+        if (in_array($user->account_type, ['nti_admin', 'superadmin', 'mentor', 'company_contact'])) {
             return;
         }
 

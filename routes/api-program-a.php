@@ -31,6 +31,7 @@ Route::middleware('auth:api')->prefix('program-a')->name('program-a.')->group(fu
 
     // Applications
     Route::apiResource('applications', ApplicationController::class)->except(['destroy']);
+    Route::delete('/applications/{application}', [ApplicationController::class, 'destroy'])->name('applications.destroy');
     Route::patch('applications/{application}/transition', [ApplicationController::class, 'transition'])->name('applications.transition');
 
     // Documents

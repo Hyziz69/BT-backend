@@ -26,7 +26,7 @@ class CompanyChallengeController extends Controller
                 $challenges = CompanyChallenge::query()
                     ->where('company_id', $user->company_id)
                     ->withCount(['applications as candidates_count' => function ($q) {
-                        $q->where('status', 'submitted');
+                        $q->whereNotIn('status', ['rejected', 'archived']);
                     }])
                     ->orderBy('created_at', 'desc')
                     ->get();
@@ -99,7 +99,7 @@ class CompanyChallengeController extends Controller
             'selectedTeam:id,name',
         ]);
         $challenge->loadCount(['applications as candidates_count' => function ($q) {
-            $q->where('status', 'submitted');
+            $q->whereNotIn('status', ['rejected', 'archived']);
         }]);
 
         $payload = [

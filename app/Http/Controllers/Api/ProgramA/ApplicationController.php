@@ -35,6 +35,9 @@ class ApplicationController extends Controller
     'evaluator' => [
         'formally_verified' => ['in_evaluation', 'pending_supplement'],
     ],
+    'company_contact' => [
+        'submitted' => ['approved'],
+    ],
 ];
 
     public function index(Request $request): JsonResponse
@@ -44,16 +47,12 @@ class ApplicationController extends Controller
         $query = Application::with(['team', 'call.program', 'documents', 'evaluations'])
             ->whereHas('call.program', fn ($q) => $q->where('type', 'program_a'));
 
-        // Keep the list consistent with authorizeView(): only privileged roles
-        // (admins, evaluators, mentors) may browse every application. Everyone
-        // else — students, company contacts, etc. — sees only applications of
-        // teams they belong to (which is none for non-team users), so the list
-        // never shows rows the detail view would then forbid with a 403.
         $privileged = in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator', 'mentor'], true);
-        if (!$privileged) {
-            $query->whereHas('team.members', fn ($q) => $q->where('user_id', $user->id));
-        } elseif ($user->account_type === 'company_contact') {
+
+        if ($user->account_type === 'company_contact') {
             $query->whereNotIn('status', ['draft', 'pending_supplement']);
+        } elseif (!$privileged) {
+            $query->whereHas('team.members', fn ($q) => $q->where('user_id', $user->id));
         }
 
         if ($request->filled('status')) {
@@ -116,6 +115,23 @@ class ApplicationController extends Controller
             'message' => 'Application draft created.',
             'data'    => new ApplicationResource($application->load(['team', 'call', 'documents'])),
         ], 201);
+    }
+
+    public function destroy(Request $request, Application $application): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($application->team->leader_id !== $user->id && !in_array($user->account_type, ['nti_admin', 'superadmin'])) {
+            return response()->json(['message' => 'Only the team leader can delete an application.'], 403);
+        }
+
+        if (!in_array($application->status, ['draft']) && !in_array($user->account_type, ['nti_admin', 'superadmin'])) {
+            return response()->json(['message' => 'Only draft applications can be deleted.'], 422);
+        }
+
+        $application->delete();
+
+        return response()->json(['message' => 'Application deleted.']);
     }
 
     public function show(Request $request, Application $application): JsonResponse
@@ -200,6 +216,7 @@ class ApplicationController extends Controller
             'student', 'team_leader' => 'student',
             'nti_admin', 'superadmin' => 'nti_admin',
             'evaluator'              => 'evaluator',
+            'company_contact'        => 'company_contact',
             default                  => 'student',
         };
     }
