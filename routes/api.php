@@ -84,6 +84,11 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/applications/{application}', [AdminApplicationController::class, 'show']);
         Route::patch('/applications/{application}/assign-mentor', [AdminApplicationController::class, 'assignMentor']);
     });
+        Route::prefix('mentor')->group(function () {
+            Route::get('/mentorships', [\App\Http\Controllers\Api\MentorController::class, 'mentorships']);
+            Route::get('/mentorships/{mentorship}', [\App\Http\Controllers\Api\MentorController::class, 'mentorship']);
+            Route::post('/mentorships/{mentorship}/consultations', [\App\Http\Controllers\Api\MentorController::class, 'logConsultation']);
+        });
 });
 
 Route::middleware(['auth:api', 'account.active'])->group(function () {

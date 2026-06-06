@@ -27,7 +27,7 @@ class MilestoneController extends Controller
     {
         $this->authorizeAccess($request->user(), $application);
 
-        if (!in_array($application->status, ['onboarding', 'active'])) {
+        if (!in_array($application->status, ['onboarding', 'active', 'approved'])) {
             return response()->json(['message' => 'Milestones can only be added to active projects.'], 422);
         }
 
