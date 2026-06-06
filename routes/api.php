@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Admin\AdminAuditEventController;
 use App\Http\Controllers\Api\Admin\AdminCallController;
 use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Admin\AdminProgramController;
+use App\Http\Controllers\Api\Mentor\MentorshipController as MentorMentorshipController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProgramA\TeamInvitationController;
@@ -27,6 +28,13 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
 
     Route::get('/users', [UserController::class, 'index']);
+
+    // Mentor workspace (the mentor's own mentorships)
+    Route::prefix('mentor')->group(function () {
+        Route::get('/mentorships', [MentorMentorshipController::class, 'index']);
+        Route::get('/mentorships/{mentorship}', [MentorMentorshipController::class, 'show']);
+        Route::post('/mentorships/{mentorship}/consultations', [MentorMentorshipController::class, 'storeConsultation']);
+    });
 
     // Notifications (bell)
     Route::get('/notifications', [NotificationController::class, 'index']);

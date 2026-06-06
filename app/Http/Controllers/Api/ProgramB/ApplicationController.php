@@ -40,6 +40,42 @@ class ApplicationController extends Controller
         ], 200);
     }
 
+    /**
+     * STUDENT PROJECT VIEW: one application as a "project" — challenge, team,
+     * milestones, assigned mentor and the mentor's consultation feedback.
+     * Visible to the team's members, the owning company's managers,
+     * the assigned mentor, and NTI admins.
+     */
+    public function show(Request $request, Application $application): JsonResponse
+    {
+        $user = $request->user();
+
+        $isMember = DB::table('team_members')
+            ->where('team_id', $application->team_id)
+            ->where('user_id', $user->id)
+            ->exists();
+        $isAdmin   = in_array($user->account_type, ['nti_admin', 'superadmin'], true);
+        $isMentor  = $application->mentorships()->where('mentor_id', $user->id)->exists();
+        $manages   = $application->challenge && $application->challenge->company
+            && $user->can('manageChallenges', $application->challenge->company);
+
+        if (! ($isMember || $isAdmin || $isMentor || $manages)) {
+            return response()->json(['message' => 'You do not have access to this project.'], 403);
+        }
+
+        $application->load([
+            'team:id,name',
+            'team.members:id,first_name,last_name,email',
+            'challenge:id,title,status,technical_spec,company_id,budget',
+            'challenge.company:id,name',
+            'milestones',
+            'mentorships.mentor:id,first_name,last_name',
+            'mentorships.consultations' => fn ($q) => $q->orderByDesc('scheduled_at'),
+        ]);
+
+        return response()->json(['application' => $application]);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -319,6 +355,22 @@ class ApplicationController extends Controller
                 ]);
             });
 
+            // Notify the team and mentor that the project is completed.
+            $title = optional($application->challenge)->title ?? 'the project';
+            $memberIds = DB::table('team_members')->where('team_id', $application->team_id)->pluck('user_id');
+            Notification::notifyUsers(
+                $memberIds,
+                'project_completed',
+                'Project completed 🎉',
+                "Your project \"{$title}\" was approved and closed by the company."
+            );
+            Notification::notifyUsers(
+                $application->mentorships()->pluck('mentor_id'),
+                'project_completed',
+                'Project completed',
+                "The project \"{$title}\" you mentored was approved and closed."
+            );
+
             return response()->json([
                 'message' => 'Projekt bol úspešne schválený a uzavretý.',
                 'application' => $application->fresh()
@@ -328,5 +380,83 @@ class ApplicationController extends Controller
             Log::error('Approve delivery error: ' . $e->getMessage());
             return response()->json(['message' => 'Vyskytla sa chyba pri uzatváraní projektu.'], 500);
         }
+    }
+
+    /**
+     * Who may manage a project's milestones: the assigned mentor,
+     * the owning company's managers, or an NTI admin.
+     */
+    private function canManageProject(Request $request, Application $application): bool
+    {
+        $user = $request->user();
+
+        if (in_array($user->account_type, ['nti_admin', 'superadmin'], true)) {
+            return true;
+        }
+        if ($application->mentorships()->where('mentor_id', $user->id)->exists()) {
+            return true;
+        }
+        $company = $application->challenge?->company;
+
+        return $company && $user->can('manageChallenges', $company);
+    }
+
+    /**
+     * Add a milestone to a project.
+     */
+    public function storeMilestone(Request $request, Application $application): JsonResponse
+    {
+        if (! $this->canManageProject($request, $application)) {
+            return response()->json(['message' => 'Nemáte oprávnenie spravovať tento projekt.'], 403);
+        }
+
+        $validated = $request->validate([
+            'title'    => 'required|string|max:255',
+            'status'   => 'nullable|in:pending,in_progress,completed,overdue',
+            'due_date' => 'nullable|date',
+            'comment'  => 'nullable|string',
+        ]);
+
+        $milestone = Milestone::create([
+            'application_id' => $application->id,
+            'title'          => $validated['title'],
+            'status'         => $validated['status'] ?? 'pending',
+            'due_date'       => $validated['due_date'] ?? null,
+            'comment'        => $validated['comment'] ?? null,
+        ]);
+
+        $memberIds = DB::table('team_members')->where('team_id', $application->team_id)->pluck('user_id');
+        Notification::notifyUsers(
+            $memberIds,
+            'milestone_added',
+            'New milestone',
+            "A new milestone was added to your project: \"{$milestone->title}\"."
+        );
+
+        return response()->json(['message' => 'Milestone created.', 'milestone' => $milestone], 201);
+    }
+
+    /**
+     * Update a milestone (status, title, due date, comment).
+     */
+    public function updateMilestone(Request $request, Application $application, Milestone $milestone): JsonResponse
+    {
+        if (! $this->canManageProject($request, $application)) {
+            return response()->json(['message' => 'Nemáte oprávnenie spravovať tento projekt.'], 403);
+        }
+        if ($milestone->application_id !== $application->id) {
+            return response()->json(['message' => 'Milestone not found.'], 404);
+        }
+
+        $validated = $request->validate([
+            'title'    => 'sometimes|required|string|max:255',
+            'status'   => 'sometimes|required|in:pending,in_progress,completed,overdue',
+            'due_date' => 'nullable|date',
+            'comment'  => 'nullable|string',
+        ]);
+
+        $milestone->update($validated);
+
+        return response()->json(['message' => 'Milestone updated.', 'milestone' => $milestone->fresh()]);
     }
 }

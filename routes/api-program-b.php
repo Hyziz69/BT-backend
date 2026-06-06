@@ -32,10 +32,13 @@ Route::middleware('auth:api')->prefix('program-b')->name('program-b.')->group(fu
     Route::prefix('applications')->name('applications.')->group(function () {
         Route::get('/', [ApplicationController::class, 'index'])->name('index');
         Route::post('/', [ApplicationController::class, 'store'])->name('store');
+        Route::get('/{application}', [ApplicationController::class, 'show'])->name('show');
         Route::post('/{application}/select', [ApplicationController::class, 'select'])->name('select');
         Route::post('/{application}/assign-mentor', [ApplicationController::class, 'assignMentor'])->name('assign-mentor');
         Route::post('/{application}/assign-po', [ApplicationController::class, 'assignPo'])->name('assign-po');
         Route::post('/{application}/approve-delivery', [ApplicationController::class, 'approveDelivery'])->name('approve-delivery');
+        Route::post('/{application}/milestones', [ApplicationController::class, 'storeMilestone'])->name('milestones.store');
+        Route::patch('/{application}/milestones/{milestone}', [ApplicationController::class, 'updateMilestone'])->name('milestones.update');
     });
 
     // Companies
