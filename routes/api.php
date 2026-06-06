@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Admin\AdminAuditEventController;
 use App\Http\Controllers\Api\Admin\AdminCallController;
 use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Admin\AdminProgramController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProgramA\TeamInvitationController;
 use App\Http\Controllers\Api\ProgramB\CompanyMemberController;
@@ -26,6 +27,12 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
 
     Route::get('/users', [UserController::class, 'index']);
+
+    // Notifications (bell)
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead']);
+    Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
+    Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy']);
 
     Route::get('/user', function (Request $request) {
         return $request->user();

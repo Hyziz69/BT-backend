@@ -7,6 +7,7 @@ use App\Models\Application;
 use App\Models\CompanyChallenge;
 use App\Models\Mentorship;
 use App\Models\Milestone;
+use App\Models\Notification;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -126,6 +127,21 @@ public function show(Application $application): JsonResponse
                 'status'            => 'draft',
             ]);
 
+            // Notify the challenge's company managers about the new application.
+            $challenge = CompanyChallenge::find($validated['challenge_id']);
+            if ($challenge) {
+                $managerIds = User::where('company_id', $challenge->company_id)
+                    ->whereIn('company_role', ['owner', 'manager'])
+                    ->pluck('id');
+
+                Notification::notifyUsers(
+                    $managerIds,
+                    'application_received',
+                    'New application',
+                    "{$team->name} applied to your challenge \"{$challenge->title}\"."
+                );
+            }
+
             return response()->json([
                 'message' => 'Prihláška bola úspešne podaná.',
                 'application' => $application
@@ -194,6 +210,32 @@ public function show(Application $application): JsonResponse
                 ]);
             });
 
+            // Notify the chosen team and the teams that were auto-rejected.
+            $title = optional($application->challenge)->title ?? 'a challenge';
+
+            $selectedMembers = DB::table('team_members')
+                ->where('team_id', $application->team_id)
+                ->pluck('user_id');
+            Notification::notifyUsers(
+                $selectedMembers,
+                'team_selected',
+                'Your team was selected! 🎉',
+                "Your team was chosen for \"{$title}\"."
+            );
+
+            $rejectedTeamIds = Application::where('challenge_id', $application->challenge_id)
+                ->where('id', '!=', $application->id)
+                ->pluck('team_id');
+            $rejectedMembers = DB::table('team_members')
+                ->whereIn('team_id', $rejectedTeamIds)
+                ->pluck('user_id');
+            Notification::notifyUsers(
+                $rejectedMembers,
+                'team_rejected',
+                'Application update',
+                "Another team was selected for \"{$title}\"."
+            );
+
             return response()->json(['message' => 'Team selected, others rejected.'], 200);
         } catch (\Exception $e) {
             Log::error('Selection error: ' . $e->getMessage());
@@ -224,6 +266,15 @@ public function show(Application $application): JsonResponse
                     'notes'          => 'Záznam o mentoringu vytvorený po výbere tímu.',
                 ]);
             });
+
+            $title = optional($application->challenge)->title ?? 'a project';
+            Notification::notifyUser(
+                $validated['mentor_id'],
+                'mentor_assigned',
+                'New mentorship',
+                "You've been assigned as mentor for \"{$title}\"."
+            );
+
             return response()->json(['message' => 'Mentor assigned.'], 200);
         } catch (\Exception $e) {
             return response()->json(['message' => 'Error.'], 500);
