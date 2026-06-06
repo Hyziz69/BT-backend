@@ -32,19 +32,17 @@ Route::middleware('auth:api')->prefix('program-b')->name('program-b.')->group(fu
     // Applications
     Route::prefix('applications')->name('applications.')->group(function () {
         Route::get('/', [ApplicationController::class, 'index'])->name('index');
-        Route::get('/', [ApplicationController::class, 'index'])->name('index');
         Route::get('/{application}', [ApplicationController::class, 'show'])->name('show');
         Route::post('/', [ApplicationController::class, 'store'])->name('store');
-        Route::post('/', [ApplicationController::class, 'store'])->name('store');
         Route::post('/{application}/select', [ApplicationController::class, 'select'])->name('select');
-//        Route::post('/{application}/assign-mentor', [ApplicationController::class, 'assignMentor'])->name('assign-mentor');
         Route::post('/{application}/assign-po', [ApplicationController::class, 'assignPo'])->name('assign-po');
         Route::post('/{application}/approve-delivery', [ApplicationController::class, 'approveDelivery'])->name('approve-delivery');
-        Route::patch('/{application}/transition', [ApplicationController::class, 'transition'])
-            ->name('transition');
+        Route::patch('/{application}/transition', [ApplicationController::class, 'transition'])->name('transition');
+        Route::post('/{application}/milestones', [ApplicationController::class, 'storeMilestone'])->name('milestones.store');
+        Route::patch('/{application}/milestones/{milestone}', [ApplicationController::class, 'updateMilestone'])->name('milestones.update');
     });
 
-    //Mentorship
+    // Mentorship
     Route::prefix('applications/{application}/mentorships')->name('applications.mentorships.')->group(function () {
         Route::get('/', [MentorshipController::class, 'index'])->name('index');
         Route::post('/', [MentorshipController::class, 'store'])->name('store');
