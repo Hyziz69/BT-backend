@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Admin\AdminCallController;
 use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Admin\AdminProgramController;
 use App\Http\Controllers\Api\Mentor\MentorshipController as MentorMentorshipController;
+use App\Http\Controllers\Api\Admin\AdminReportController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProgramA\TeamInvitationController;
@@ -69,6 +70,10 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/audit-events', [AdminAuditEventController::class, 'index']);
         Route::get('/audit-events/filters', [AdminAuditEventController::class, 'filters']);
 
+        Route::get('/reports', [AdminReportController::class, 'index']);
+        Route::get('/reports/summary', [AdminReportController::class, 'summary']);
+        Route::get('/reports/{type}/csv', [AdminReportController::class, 'download']);
+
         Route::get('/users', [AdminController::class, 'users']);
         Route::get('/users/{user}', [AdminController::class, 'showUser']);
         Route::patch('/users/{user}', [AdminController::class, 'updateUser']);
@@ -92,11 +97,6 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/applications/{application}', [AdminApplicationController::class, 'show']);
         Route::patch('/applications/{application}/assign-mentor', [AdminApplicationController::class, 'assignMentor']);
     });
-        Route::prefix('mentor')->group(function () {
-            Route::get('/mentorships', [\App\Http\Controllers\Api\MentorController::class, 'mentorships']);
-            Route::get('/mentorships/{mentorship}', [\App\Http\Controllers\Api\MentorController::class, 'mentorship']);
-            Route::post('/mentorships/{mentorship}/consultations', [\App\Http\Controllers\Api\MentorController::class, 'logConsultation']);
-        });
 });
 
 Route::middleware(['auth:api', 'account.active'])->group(function () {
