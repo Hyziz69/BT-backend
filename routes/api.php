@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Admin\AdminAuditEventController;
 use App\Http\Controllers\Api\Admin\AdminCallController;
 use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Admin\AdminProgramController;
+use App\Http\Controllers\Api\Admin\AdminReportController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProgramA\TeamInvitationController;
@@ -60,6 +61,10 @@ Route::middleware('auth:api')->group(function () {
 
         Route::get('/audit-events', [AdminAuditEventController::class, 'index']);
         Route::get('/audit-events/filters', [AdminAuditEventController::class, 'filters']);
+
+        Route::get('/reports', [AdminReportController::class, 'index']);
+        Route::get('/reports/summary', [AdminReportController::class, 'summary']);
+        Route::get('/reports/{type}/csv', [AdminReportController::class, 'download']);
 
         Route::get('/users', [AdminController::class, 'users']);
         Route::get('/users/{user}', [AdminController::class, 'showUser']);
