@@ -149,7 +149,7 @@ public function index(Request $request): JsonResponse
                 'challenge_id'      => $validated['challenge_id'],
                 'motivation_letter' => $validated['motivation_letter'] ?? null,
                 'solution_proposal' => $validated['solution_proposal'] ?? null,
-                'status'            => 'draft',
+                'status'            => 'submitted',
             ]);
 
             // Notify the challenge's company managers about the new application.

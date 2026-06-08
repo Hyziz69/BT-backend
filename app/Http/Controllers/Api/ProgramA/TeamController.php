@@ -158,4 +158,64 @@ class TeamController extends Controller
             abort(403, 'Only the team leader can perform this action.');
         }
     }
+    public function destroy(Request $request, Team $team): JsonResponse
+    {
+        $this->authorizeTeamLeader($request->user(), $team);
+
+        DB::transaction(function () use ($team) {
+            $team->applications()->each(function ($application) {
+                $application->documents()->delete();
+                $application->evaluations()->delete();
+                $application->milestones()->delete();
+                $application->mentorships()->delete();
+                $application->delete();
+            });
+            TeamMember::where('team_id', $team->id)->delete();
+            $team->delete();
+        });
+
+        return response()->json(['message' => 'Team deleted.']);
+    }
+
+    public function join(Request $request): JsonResponse
+{
+        $user = $request->user();
+        
+        $request->validate(['invite_code' => 'required|string']);
+        
+        $team = Team::where('invite_code', $request->invite_code)->firstOrFail();
+        
+        $alreadyMember = TeamMember::where('team_id', $team->id)
+            ->where('user_id', $user->id)
+            ->exists();
+            
+        if ($alreadyMember) {
+            return response()->json(['message' => 'You are already a member of this team.'], 422);
+        }
+        
+        TeamMember::create([
+            'team_id' => $team->id,
+            'user_id' => $user->id,
+            'role'    => 'member',
+        ]);
+
+        \App\Models\Notification::notifyUser(
+            $user->id,
+            'team_joined',
+            'You joined a team!',
+            "You successfully joined team \"{$team->name}\"."
+        );
+
+        \App\Models\Notification::notifyUser(
+            $team->leader_id,
+            'member_joined',
+            'New team member',
+            "{$user->first_name} {$user->last_name} joined your team \"{$team->name}\"."
+        );
+        
+        return response()->json([
+            'message' => 'Joined team successfully.',
+            'data'    => new TeamResource($team->load(['members', 'leader'])),
+        ]);
+    }
 }

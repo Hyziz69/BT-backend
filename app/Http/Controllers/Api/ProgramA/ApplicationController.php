@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\Evaluation;
+use App\Models\Notification;
 
 class ApplicationController extends Controller
 {
@@ -202,6 +203,14 @@ class ApplicationController extends Controller
                 'to'    => $newStatus,
                 'notes' => $request->decision_notes,
             ]);
+
+            $memberIds = $application->team->members()->pluck('users.id');
+            \App\Models\Notification::notifyUsers(
+                $memberIds,
+                'application_status_changed',
+                'Application status updated',
+                "Your application status changed to '{$newStatus}'."
+            );
         });
 
         return response()->json([

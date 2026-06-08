@@ -21,7 +21,9 @@ Route::middleware('auth:api')->prefix('program-a')->name('program-a.')->group(fu
     Route::patch('calls/{call}', [CallController::class, 'update'])->name('calls.update');
 
     // Teams
+    Route::post('teams/join', [TeamController::class, 'join'])->name('teams.join');
     Route::apiResource('teams', TeamController::class)->except(['destroy']);
+    Route::delete('teams/{team}', [TeamController::class, 'destroy'])->name('teams.destroy');
     Route::delete('teams/{team}/members/{user}', [TeamController::class, 'removeMember'])->name('teams.members.remove');
 
     // Team Invitations

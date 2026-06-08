@@ -9,6 +9,7 @@ class TeamResource extends JsonResource
         return [
             'id'           => $this->id,
             'name'         => $this->name,
+            'invite_code'  => $this->invite_code,
             'competencies' => $this->competencies ?? [],
             'leader'       => [
                 'id'    => $this->leader->id,
