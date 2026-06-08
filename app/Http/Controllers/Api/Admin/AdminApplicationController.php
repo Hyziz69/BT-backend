@@ -89,7 +89,7 @@ class AdminApplicationController extends Controller
             'started_at' => now(),
         ]);
 
-        $memberIds = $application->team->members()->pluck('users.id');
+        $memberIds = $application->team->members()->pluck('team_members.user_id');
         \App\Models\Notification::notifyUsers(
             $memberIds,
             'mentor_assigned',
