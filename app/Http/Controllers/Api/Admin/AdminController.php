@@ -104,6 +104,7 @@ class AdminController extends Controller
                     'mentor',
                     'company_contact',
                     'editor',
+                    'evaluator',
                     'nti_admin',
                     'superadmin',
                 ]),

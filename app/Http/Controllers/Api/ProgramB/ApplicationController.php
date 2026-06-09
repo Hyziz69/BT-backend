@@ -411,6 +411,8 @@ public function transition(Request $request, Application $application): JsonResp
         $currentStatus = $application->status;
         $allowed = self::ALLOWED_TRANSITIONS[$currentStatus] ?? [];
         $isAdmin = in_array($user->account_type, ['nti_admin', 'superadmin']);
+        $isCompany = $user->account_type === 'company_contact';
+        $isEvaluator = $user->account_type === 'evaluator';
 
         if (!in_array($newStatus, $allowed)) {
             return response()->json([
@@ -440,6 +442,19 @@ public function transition(Request $request, Application $application): JsonResp
 
             $application->submitted_at = now();
         } else {
+            $companyAllowed = ['approved', 'rejected'];
+            $evaluatorAllowed = ['formally_verified', 'in_evaluation', 'pending_supplement'];
+
+            if (!$isAdmin) {
+                if ($isCompany && !in_array($newStatus, $companyAllowed)) {
+                    return response()->json(['message' => 'Nedostatočné oprávnenia pre tento prechod stavu.'], 403);
+                } elseif ($isEvaluator && !in_array($newStatus, $evaluatorAllowed)) {
+                    return response()->json(['message' => 'Nedostatočné oprávnenia pre tento prechod stavu.'], 403);
+                } elseif (!$isCompany && !$isEvaluator) {
+                    return response()->json(['message' => 'Nedostatočné oprávnenia pre tento prechod stavu.'], 403);
+                }
+            }
+
             if (!$isAdmin) {
                 return response()->json(['message' => 'Nedostatočné oprávnenia pre tento prechod stavu.'], 403);
             }
