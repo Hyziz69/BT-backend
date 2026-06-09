@@ -96,6 +96,8 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/applications', [AdminApplicationController::class, 'index']);
         Route::get('/applications/{application}', [AdminApplicationController::class, 'show']);
         Route::patch('/applications/{application}/assign-mentor', [AdminApplicationController::class, 'assignMentor']);
+
+        Route::get('/teams', [AdminController::class, 'teams']);
     });
 });
 

@@ -279,6 +279,16 @@ class AdminController extends Controller
         }
     }
 
+    public function teams(): JsonResponse
+    {
+        $teams = \App\Models\Team::with(['leader', 'members'])
+            ->withCount('members')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json(['data' => $teams]);
+    }
+
     private function sendAccountRejectedMail(User $user): bool
     {
         try {
