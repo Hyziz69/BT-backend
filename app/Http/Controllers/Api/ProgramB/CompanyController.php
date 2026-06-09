@@ -6,25 +6,46 @@ use App\Http\Controllers\Controller;
 use App\Models\Company;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class CompanyController extends Controller
 {
     public function register(Request $request): JsonResponse
     {
+        $user = $request->user();
+
+        // Only company representatives may register a company.
+        if ($user->account_type !== 'company_contact') {
+            return response()->json(['message' => 'Iba zástupcovia spoločnosti môžu zaregistrovať spoločnosť.'], 403);
+        }
+
+        // A user can only belong to one company at a time.
+        if ($user->belongsToCompany()) {
+            return response()->json(['message' => 'Už ste priradený k spoločnosti.'], 422);
+        }
+
         // Validate the incoming request. IČO must be unique across the whole table.
         $validated = $request->validate([
             'name'        => 'required|string|max:255',
-            'ICO'         => 'required|string|unique:companies,ICO|max:20',
+            'ico'         => 'required|string|unique:companies,ico|max:20',
             'sector'      => 'required|string|max:100',
             'description' => 'nullable|string',
             'website'     => 'nullable|url',
-            'contacts'    => 'nullable|array', // expecting a JSON object from the frontend
         ]);
 
         try {
-            // Create the new company record in the DB
-            $company = Company::create($validated);
+            // Create the company and link the creator as its owner in a single transaction.
+            $company = DB::transaction(function () use ($validated, $user) {
+                $company = Company::create($validated + ['status' => 'active']);
+
+                $user->update([
+                    'company_id'   => $company->id,
+                    'company_role' => 'owner',
+                ]);
+
+                return $company;
+            });
 
             return response()->json([
                 'message' => 'Spoločnosť bola úspešne zaregistrovaná.',
@@ -48,16 +69,18 @@ class CompanyController extends Controller
 
     public function update(Request $request, Company $company): JsonResponse
     {
-        // TODO add policy check here later so only the company admin can edit this profile
+        // Only owners/managers of this company (or admins) may edit the profile.
+        if ($request->user()->cannot('update', $company)) {
+            return response()->json(['message' => 'Prístup zamietnutý.'], 403);
+        }
 
         // Using 'sometimes' so the frontend can send only the fields that were actually changed
         $validated = $request->validate([
             'name'        => 'sometimes|required|string|max:255',
-            'ICO'         => 'sometimes|required|string|max:20|unique:companies,ICO,' . $company->id,
+            'ico'         => 'sometimes|required|string|max:20|unique:companies,ico,' . $company->id,
             'sector'      => 'sometimes|required|string|max:100',
             'description' => 'nullable|string',
             'website'     => 'nullable|url',
-            'contacts'    => 'nullable|array',
         ]);
 
         try {

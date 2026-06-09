@@ -21,4 +21,31 @@ class Notification extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    /**
+     * Create one unread notification for a user.
+     */
+    public static function notifyUser(string $userId, string $type, string $subject, string $body): void
+    {
+        static::create([
+            'user_id' => $userId,
+            'type'    => $type,
+            'subject' => $subject,
+            'body'    => $body,
+            'is_read' => false,
+            'sent_at' => now(),
+        ]);
+    }
+
+    /**
+     * Create the same notification for many users (e.g. all team members).
+     */
+    public static function notifyUsers(iterable $userIds, string $type, string $subject, string $body): void
+    {
+        foreach ($userIds as $userId) {
+            if ($userId) {
+                static::notifyUser($userId, $type, $subject, $body);
+            }
+        }
+    }
 }

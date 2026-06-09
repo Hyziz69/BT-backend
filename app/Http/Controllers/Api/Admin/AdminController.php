@@ -7,6 +7,7 @@ use App\Mail\AccountApprovedMail;
 use App\Mail\AccountRejectedMail;
 use App\Models\Application;
 use App\Models\Call;
+use App\Models\CompanyInvitation;
 use App\Models\Program;
 use App\Models\User;
 use Illuminate\Database\QueryException;
@@ -103,6 +104,7 @@ class AdminController extends Controller
                     'mentor',
                     'company_contact',
                     'editor',
+                    'evaluator',
                     'nti_admin',
                     'superadmin',
                 ]),
@@ -140,6 +142,8 @@ class AdminController extends Controller
             'status' => 'active',
         ]);
 
+        $this->resolvePendingCompanyInvitations($user->fresh());
+
         $mailSent = $this->sendAccountApprovedMail($user->fresh());
 
         return response()->json([
@@ -149,6 +153,33 @@ class AdminController extends Controller
             'mail_sent' => $mailSent,
             'user' => $this->userPayload($user->fresh()),
         ]);
+    }
+
+    /**
+     * When a company representative is approved, finish any company invitation they
+     * accepted while still pending (registered_user_id was stored at accept time).
+     */
+    private function resolvePendingCompanyInvitations(User $user): void
+    {
+        if ($user->account_type !== 'company_contact' || $user->belongsToCompany()) {
+            return;
+        }
+
+        $invitation = CompanyInvitation::where('registered_user_id', $user->id)
+            ->pending()
+            ->latest()
+            ->first();
+
+        if (!$invitation) {
+            return;
+        }
+
+        $user->update([
+            'company_id'   => $invitation->company_id,
+            'company_role' => $invitation->role,
+        ]);
+
+        $invitation->update(['status' => 'accepted']);
     }
 
     public function rejectUser(User $user): JsonResponse
@@ -203,9 +234,11 @@ class AdminController extends Controller
         $adminEmails = $this->getDeletionNotificationEmails($currentUser);
 
         try {
-            $user->delete();
-        } catch (QueryException $e) {
-            Log::error('User deletion failed.', [
+            Mail::to($user->email)->send(new AccountRejectedMail($user));
+        } catch (\Throwable $e) {
+            $mailSent = false;
+
+            Log::error('AccountRejectedMail failed', [
                 'user_id' => $user->id,
                 'email' => $user->email,
                 'error' => $e->getMessage(),
@@ -245,6 +278,16 @@ class AdminController extends Controller
 
             return false;
         }
+    }
+
+    public function teams(): JsonResponse
+    {
+        $teams = \App\Models\Team::with(['leader', 'members'])
+            ->withCount('members')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json(['data' => $teams]);
     }
 
     private function sendAccountRejectedMail(User $user): bool

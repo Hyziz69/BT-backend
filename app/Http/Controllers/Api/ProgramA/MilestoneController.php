@@ -27,7 +27,7 @@ class MilestoneController extends Controller
     {
         $this->authorizeAccess($request->user(), $application);
 
-        if (!in_array($application->status, ['onboarding', 'active'])) {
+        if (!in_array($application->status, ['onboarding', 'active', 'approved'])) {
             return response()->json(['message' => 'Milestones can only be added to active projects.'], 422);
         }
 
@@ -79,15 +79,13 @@ class MilestoneController extends Controller
 
     private function authorizeAccess($user, Application $application): void
     {
-        if (in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator'])) {
+        if (in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator', 'mentor', 'company_contact'])) {
             return;
         }
 
-        $isMentor = $application->mentorships()->where('mentor_id', $user->id)->exists();
         $isMember = $application->team->members()->where('user_id', $user->id)->exists();
-
-        if (!$isMentor && !$isMember) {
-            abort(403, 'Access denied.');
+        if (!$isMember) {
+            abort(403, 'You do not have access to this application\'s documents.');
         }
     }
 

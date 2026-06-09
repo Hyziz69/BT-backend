@@ -8,6 +8,7 @@ use App\Models\Mentorship;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Models\Notification;
 
 class AdminApplicationController extends Controller
 {
@@ -87,6 +88,21 @@ class AdminApplicationController extends Controller
             'notes' => $validated['notes'] ?? null,
             'started_at' => now(),
         ]);
+
+        $memberIds = $application->team->members()->pluck('team_members.user_id');
+        \App\Models\Notification::notifyUsers(
+            $memberIds,
+            'mentor_assigned',
+            'Mentor assigned',
+            'A mentor has been assigned to your application.'
+        );
+
+        \App\Models\Notification::notifyUser(
+            $validated['mentor_id'],
+            'mentor_assigned',
+            'New mentorship',
+            "You've been assigned as mentor for team \"{$application->team->name}\"."
+        );
 
         return response()->json([
             'message' => 'Mentor assigned successfully.',

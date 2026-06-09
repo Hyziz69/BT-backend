@@ -21,7 +21,9 @@ Route::middleware('auth:api')->prefix('program-a')->name('program-a.')->group(fu
     Route::patch('calls/{call}', [CallController::class, 'update'])->name('calls.update');
 
     // Teams
+    Route::post('teams/join', [TeamController::class, 'join'])->name('teams.join');
     Route::apiResource('teams', TeamController::class)->except(['destroy']);
+    Route::delete('teams/{team}', [TeamController::class, 'destroy'])->name('teams.destroy');
     Route::delete('teams/{team}/members/{user}', [TeamController::class, 'removeMember'])->name('teams.members.remove');
 
     // Team Invitations
@@ -31,6 +33,7 @@ Route::middleware('auth:api')->prefix('program-a')->name('program-a.')->group(fu
 
     // Applications
     Route::apiResource('applications', ApplicationController::class)->except(['destroy']);
+    Route::delete('/applications/{application}', [ApplicationController::class, 'destroy'])->name('applications.destroy');
     Route::patch('applications/{application}/transition', [ApplicationController::class, 'transition'])->name('applications.transition');
 
     // Documents

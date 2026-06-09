@@ -13,6 +13,8 @@ use App\Models\AuditEvent;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Models\Evaluation;
+use App\Models\Notification;
 
 class ApplicationController extends Controller
 {
@@ -32,7 +34,11 @@ class ApplicationController extends Controller
         'completed'          => ['archived'],
     ],
     'evaluator' => [
-        'formally_verified' => ['in_evaluation', 'pending_supplement'],
+        'formally_verified'  => ['in_evaluation', 'pending_supplement'],
+        'in_evaluation'      => ['pending_supplement'],
+    ],
+    'company_contact' => [
+        'submitted' => ['approved'],
     ],
 ];
 
@@ -43,7 +49,11 @@ class ApplicationController extends Controller
         $query = Application::with(['team', 'call.program', 'documents', 'evaluations'])
             ->whereHas('call.program', fn ($q) => $q->where('type', 'program_a'));
 
-        if ($user->account_type === 'student') {
+        $privileged = in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator', 'mentor'], true);
+
+        if ($user->account_type === 'company_contact') {
+            $query->whereNotIn('status', ['draft', 'pending_supplement']);
+        } elseif (!$privileged) {
             $query->whereHas('team.members', fn ($q) => $q->where('user_id', $user->id));
         }
 
@@ -109,6 +119,23 @@ class ApplicationController extends Controller
         ], 201);
     }
 
+    public function destroy(Request $request, Application $application): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($application->team->leader_id !== $user->id && !in_array($user->account_type, ['nti_admin', 'superadmin'])) {
+            return response()->json(['message' => 'Only the team leader can delete an application.'], 403);
+        }
+
+        if (!in_array($application->status, ['draft']) && !in_array($user->account_type, ['nti_admin', 'superadmin'])) {
+            return response()->json(['message' => 'Only draft applications can be deleted.'], 422);
+        }
+
+        $application->delete();
+
+        return response()->json(['message' => 'Application deleted.']);
+    }
+
     public function show(Request $request, Application $application): JsonResponse
     {
         $this->authorizeView($request->user(), $application);
@@ -139,50 +166,96 @@ class ApplicationController extends Controller
         ]);
     }
 
-    public function transition(TransitionApplicationRequest $request, Application $application): JsonResponse
+    public function transition(Request $request, Application $application): JsonResponse
     {
-        $user       = $request->user();
-        $newStatus  = $request->status;
-        $roleKey    = $this->resolveRoleKey($user->account_type);
+        $user = $request->user();
 
-        if ($roleKey === 'student') {
-            $this->authorizeTeamLeaderOfApplication($user, $application);
+        $validated = $request->validate([
+            'status'         => 'required|string|in:draft,submitted,formally_verified,in_evaluation,pending_supplement,approved,rejected,onboarding,active,paused,completed,archived',
+            'decision_notes' => 'nullable|string',
+            'score'          => 'nullable|numeric|min:0|max:100',
+        ]);
+
+        $newStatus     = $validated['status'];
+        $currentStatus = $application->status;
+        $isAdmin       = in_array($user->account_type, ['nti_admin', 'superadmin']);
+
+        // Admins can force any status
+        if ($isAdmin) {
+            if (array_key_exists('decision_notes', $validated)) {
+                $application->decision_notes = $validated['decision_notes'];
+            }
+            if (in_array($newStatus, ['approved', 'rejected'])) {
+                $application->decided_at = now();
+                $application->score = $validated['score'] ?? null;
+            }
+            if ($newStatus === 'submitted') {
+                $application->submitted_at = now();
+            }
+            $application->status = $newStatus;
+            $application->save();
+
+            $application->load(['team.members', 'call.program', 'challenge', 'milestones', 'mentorships.mentor']);
+            $application->setAttribute('available_transitions', self::TRANSITIONS['nti_admin'][$newStatus] ?? []);
+
+            return response()->json($application);
         }
 
-        $allowed = self::TRANSITIONS[$roleKey][$application->status] ?? [];
+        // Non-admin: check allowed transitions
+        $roleKey = $this->resolveRoleKey($user->account_type);
+        $allowed = self::TRANSITIONS[$roleKey][$currentStatus] ?? [];
 
         if (!in_array($newStatus, $allowed)) {
             return response()->json([
-                'message' => "Transition from '{$application->status}' to '{$newStatus}' is not permitted for your role.",
+                'message' => "Transition from '{$currentStatus}' to '{$newStatus}' is not permitted for your role.",
             ], 422);
         }
 
-        DB::transaction(function () use ($application, $newStatus, $request, $user) {
-            $updates = ['status' => $newStatus];
-
-            if ($newStatus === 'submitted') {
-                $updates['submitted_at'] = now();
-
-                $this->assertRequiredDocuments($application);
+        if ($newStatus === 'submitted') {
+            if ($application->team->leader_id !== $user->id) {
+                return response()->json(['message' => 'Only the team leader can submit the application.'], 403);
             }
 
+            $missingCvs = [];
+            $application->loadMissing('team.members.profile');
+            foreach ($application->team->members as $member) {
+                if (!$member->profile || empty($member->profile->cv_path)) {
+                    $missingCvs[] = $member->first_name . ' ' . $member->last_name;
+                }
+            }
+            if (!empty($missingCvs)) {
+                return response()->json([
+                    'message' => 'Cannot submit. Missing CVs: ' . implode(', ', $missingCvs),
+                ], 422);
+            }
+
+            $application->submitted_at = now();
+        } else {
+            if (array_key_exists('decision_notes', $validated)) {
+                $application->decision_notes = $validated['decision_notes'];
+            }
             if (in_array($newStatus, ['approved', 'rejected'])) {
-                $updates['decided_at']      = now();
-                $updates['decision_notes']  = $request->decision_notes;
+                $application->score      = $validated['score'] ?? null;
+                $application->decided_at = now();
             }
+        }
 
-            $application->update($updates);
-            $this->auditLog($user, 'application.status_changed', $application, [
-                'from'  => $application->getOriginal('status'),
-                'to'    => $newStatus,
-                'notes' => $request->decision_notes,
-            ]);
-        });
+        $application->status = $newStatus;
+        $application->save();
 
-        return response()->json([
-            'message' => "Application status changed to '{$newStatus}'.",
-            'data'    => new ApplicationResource($application->fresh(['team', 'call', 'documents'])),
-        ]);
+        $application->load(['team.members', 'call.program', 'challenge', 'milestones', 'mentorships.mentor']);
+        $application->setAttribute('available_transitions', self::TRANSITIONS[$roleKey][$newStatus] ?? []);
+
+        // Notify team members of status change
+        $memberIds = $application->team->members()->pluck('team_members.user_id');
+        \App\Models\Notification::notifyUsers(
+            $memberIds,
+            'status_changed',
+            'Application status updated',
+            "Your application status changed to '{$newStatus}'."
+        );
+
+        return response()->json($application);
     }
 
     private function resolveRoleKey(string $accountType): string
@@ -191,6 +264,7 @@ class ApplicationController extends Controller
             'student', 'team_leader' => 'student',
             'nti_admin', 'superadmin' => 'nti_admin',
             'evaluator'              => 'evaluator',
+            'company_contact'        => 'company_contact',
             default                  => 'student',
         };
     }
@@ -216,7 +290,7 @@ class ApplicationController extends Controller
 
     private function authorizeView($user, Application $application): void
     {
-        if (in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator', 'mentor'])) {
+        if (in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator', 'mentor', 'company_contact'])) {
             return;
         }
 

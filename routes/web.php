@@ -11,3 +11,7 @@ Route::any('/login', function () {
         'message' => 'Unauthenticated.'
     ], 401);
 })->name('login');
+
+Route::get('/reset-password/{token}', function () {
+    return response()->json(['message' => 'Use the frontend app to reset your password.']);
+})->name('password.reset');

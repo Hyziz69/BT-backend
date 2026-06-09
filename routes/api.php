@@ -5,8 +5,12 @@ use App\Http\Controllers\Api\Admin\AdminAuditEventController;
 use App\Http\Controllers\Api\Admin\AdminCallController;
 use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Admin\AdminProgramController;
+use App\Http\Controllers\Api\Mentor\MentorshipController as MentorMentorshipController;
+use App\Http\Controllers\Api\Admin\AdminReportController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProgramA\TeamInvitationController;
+use App\Http\Controllers\Api\ProgramB\CompanyMemberController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\UserController;
 use Illuminate\Http\Request;
@@ -18,12 +22,26 @@ Route::post('/password/reset', [AuthController::class, 'forgotPassword']);
 Route::post('/password/reset/confirm', [AuthController::class, 'resetPassword']);
 
 Route::get('/program-a/invitations/{token}', [TeamInvitationController::class, 'preview']);
+Route::get('/program-b/companies/invitations/{token}', [CompanyMemberController::class, 'preview']);
 
 Route::middleware('auth:api')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
 
     Route::get('/users', [UserController::class, 'index']);
+
+    // Mentor workspace (the mentor's own mentorships)
+    Route::prefix('mentor')->group(function () {
+        Route::get('/mentorships', [MentorMentorshipController::class, 'index']);
+        Route::get('/mentorships/{mentorship}', [MentorMentorshipController::class, 'show']);
+        Route::post('/mentorships/{mentorship}/consultations', [MentorMentorshipController::class, 'storeConsultation']);
+    });
+
+    // Notifications (bell)
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead']);
+    Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
+    Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy']);
 
     Route::get('/user', function (Request $request) {
         return $request->user();
@@ -44,12 +62,17 @@ Route::middleware('auth:api')->group(function () {
     Route::patch('/user/password', [ProfileController::class, 'changePassword']);
 
     Route::post('/program-a/invitations/accept', [TeamInvitationController::class, 'accept']);
+    Route::post('/program-b/companies/invitations/accept', [CompanyMemberController::class, 'accept']);
 
     Route::middleware(['role:nti_admin,superadmin', 'admin.audit'])->prefix('admin')->group(function () {
         Route::get('/dashboard', [AdminController::class, 'dashboard']);
 
         Route::get('/audit-events', [AdminAuditEventController::class, 'index']);
         Route::get('/audit-events/filters', [AdminAuditEventController::class, 'filters']);
+
+        Route::get('/reports', [AdminReportController::class, 'index']);
+        Route::get('/reports/summary', [AdminReportController::class, 'summary']);
+        Route::get('/reports/{type}/csv', [AdminReportController::class, 'download']);
 
         Route::get('/users', [AdminController::class, 'users']);
         Route::get('/users/{user}', [AdminController::class, 'showUser']);
@@ -73,6 +96,8 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/applications', [AdminApplicationController::class, 'index']);
         Route::get('/applications/{application}', [AdminApplicationController::class, 'show']);
         Route::patch('/applications/{application}/assign-mentor', [AdminApplicationController::class, 'assignMentor']);
+
+        Route::get('/teams', [AdminController::class, 'teams']);
     });
 });
 

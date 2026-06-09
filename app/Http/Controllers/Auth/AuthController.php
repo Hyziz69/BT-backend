@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
+use App\Models\Notification;
 
 class AuthController extends Controller
 {
@@ -40,6 +41,14 @@ class AuthController extends Controller
 
         $adminMailSent = $this->sendAdminApprovalNotification($user);
         $userMailSent = $this->sendRegistrationSubmittedNotification($user);
+
+        $adminIds = User::where('account_type', 'nti_admin')->pluck('id');
+        \App\Models\Notification::notifyUsers(
+            $adminIds,
+            'new_registration',
+            'New registration',
+            "{$user->first_name} {$user->last_name} registered as {$user->account_type}."
+        );
 
         return response()->json([
             'message' => 'Registration submitted successfully. Please wait for admin approval.',
