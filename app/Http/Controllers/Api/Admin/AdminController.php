@@ -323,6 +323,39 @@ class AdminController extends Controller
             ->values();
     }
 
+    public function approveDeletion(string $id): JsonResponse
+    {
+        $user = \App\Models\User::findOrFail($id);
+
+        if ($user->status !== 'pending_deletion') {
+            return response()->json(['message' => 'User has no pending deletion request.'], 422);
+        }
+
+        // Anonymize instead of hard delete to preserve audit trail
+        $user->update([
+            'first_name' => 'Deleted',
+            'last_name'  => 'User',
+            'email'      => 'deleted-' . $user->id . '@nti.deleted',
+            'status'     => 'suspended',
+            'password'   => bcrypt(\Illuminate\Support\Str::random(32)),
+        ]);
+
+        return response()->json(['message' => 'User data anonymized and account suspended.']);
+    }
+
+    public function rejectDeletion(string $id): JsonResponse
+    {
+        $user = \App\Models\User::findOrFail($id);
+
+        if ($user->status !== 'pending_deletion') {
+            return response()->json(['message' => 'User has no pending deletion request.'], 422);
+        }
+
+        $user->update(['status' => 'active']);
+
+        return response()->json(['message' => 'Deletion request rejected, user restored to active.']);
+    }
+
     private function sendAccountDeletedMail(array $deletedUser, ?array $deletedBy, Collection $adminEmails): bool
     {
         try {

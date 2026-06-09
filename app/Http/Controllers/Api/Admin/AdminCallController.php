@@ -84,14 +84,43 @@ class AdminCallController extends Controller
 
     public function close(Call $call): JsonResponse
     {
-        $call->update([
-            'status' => 'closed',
-            'closes_at' => $call->closes_at ?? now(),
-        ]);
+        \Illuminate\Support\Facades\DB::transaction(function () use ($call) {
+            $call->update([
+                'status'    => 'closed',
+                'closes_at' => $call->closes_at ?? now(),
+            ]);
+
+            // Auto-reject all pending applications for this call
+            $pendingStatuses = ['draft', 'submitted', 'formally_verified', 'in_evaluation', 'pending_supplement'];
+
+            $pendingApplications = \App\Models\Application::where('call_id', $call->id)
+                ->whereIn('status', $pendingStatuses)
+                ->get();
+
+            foreach ($pendingApplications as $application) {
+                $application->update([
+                    'status'     => 'rejected',
+                    'decided_at' => now(),
+                    'decision_notes' => 'Call closed by administrator.',
+                ]);
+
+                // Notify team members
+                $memberIds = \Illuminate\Support\Facades\DB::table('team_members')
+                    ->where('team_id', $application->team_id)
+                    ->pluck('user_id');
+
+                \App\Models\Notification::notifyUsers(
+                    $memberIds,
+                    'application_rejected',
+                    'Application closed',
+                    "The call \"{$call->title}\" has been closed. Your application was not selected."
+                );
+            }
+        });
 
         return response()->json([
-            'message' => 'Call closed successfully.',
-            'data' => $call->fresh(['program', 'createdBy']),
+            'message' => 'Call closed successfully. Pending applications have been rejected.',
+            'data'    => $call->fresh(['program', 'createdBy']),
         ]);
     }
 }

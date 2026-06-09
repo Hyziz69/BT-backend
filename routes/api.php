@@ -4,22 +4,27 @@ use App\Http\Controllers\Api\Admin\AdminApplicationController;
 use App\Http\Controllers\Api\Admin\AdminAuditEventController;
 use App\Http\Controllers\Api\Admin\AdminCallController;
 use App\Http\Controllers\Api\Admin\AdminController;
+use App\Http\Controllers\Api\Admin\AdminContentController;
 use App\Http\Controllers\Api\Admin\AdminProgramController;
 use App\Http\Controllers\Api\Mentor\MentorshipController as MentorMentorshipController;
 use App\Http\Controllers\Api\Admin\AdminReportController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\PublicContentController;
 use App\Http\Controllers\Api\ProgramA\TeamInvitationController;
 use App\Http\Controllers\Api\ProgramB\CompanyMemberController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\UserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\GdprController;
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/password/reset', [AuthController::class, 'forgotPassword']);
 Route::post('/password/reset/confirm', [AuthController::class, 'resetPassword']);
+
+Route::get('/content', [PublicContentController::class, 'index']);
 
 Route::get('/program-a/invitations/{token}', [TeamInvitationController::class, 'preview']);
 Route::get('/program-b/companies/invitations/{token}', [CompanyMemberController::class, 'preview']);
@@ -27,6 +32,9 @@ Route::get('/program-b/companies/invitations/{token}', [CompanyMemberController:
 Route::middleware('auth:api')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::get('/gdpr/export', [GdprController::class, 'export']);
+    Route::post('/gdpr/request-deletion', [GdprController::class, 'requestDeletion']);
+    Route::post('/gdpr/cancel-deletion', [GdprController::class, 'cancelDeletion']);
 
     Route::get('/users', [UserController::class, 'index']);
 
@@ -66,6 +74,8 @@ Route::middleware('auth:api')->group(function () {
 
     Route::middleware(['role:nti_admin,superadmin', 'admin.audit'])->prefix('admin')->group(function () {
         Route::get('/dashboard', [AdminController::class, 'dashboard']);
+        Route::post('/users/{id}/approve-deletion', [AdminController::class, 'approveDeletion']);
+        Route::post('/users/{id}/reject-deletion', [AdminController::class, 'rejectDeletion']);
 
         Route::get('/audit-events', [AdminAuditEventController::class, 'index']);
         Route::get('/audit-events/filters', [AdminAuditEventController::class, 'filters']);
@@ -98,6 +108,9 @@ Route::middleware('auth:api')->group(function () {
         Route::patch('/applications/{application}/assign-mentor', [AdminApplicationController::class, 'assignMentor']);
 
         Route::get('/teams', [AdminController::class, 'teams']);
+
+        Route::get('/content', [AdminContentController::class, 'index']);
+        Route::patch('/content/{key}', [AdminContentController::class, 'update']);
     });
 });
 

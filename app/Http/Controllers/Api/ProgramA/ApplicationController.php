@@ -198,6 +198,17 @@ class ApplicationController extends Controller
             $application->load(['team.members', 'call.program', 'challenge', 'milestones', 'mentorships.mentor']);
             $application->setAttribute('available_transitions', self::TRANSITIONS['nti_admin'][$newStatus] ?? []);
 
+            // Notify on completion
+            if ($newStatus === 'completed') {
+                $memberIds = $application->team->members()->pluck('team_members.user_id');
+                \App\Models\Notification::notifyUsers(
+                    $memberIds,
+                    'project_completed',
+                    'Project completed 🎉',
+                    "Congratulations! Your project has been marked as completed."
+                );
+            }
+
             return response()->json($application);
         }
 
@@ -254,6 +265,16 @@ class ApplicationController extends Controller
             'Application status updated',
             "Your application status changed to '{$newStatus}'."
         );
+
+        // Extra notification on completion
+        if ($newStatus === 'completed') {
+            \App\Models\Notification::notifyUsers(
+                $memberIds,
+                'project_completed',
+                'Project completed 🎉',
+                "Congratulations! Your project has been marked as completed."
+            );
+        }
 
         return response()->json($application);
     }
