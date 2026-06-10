@@ -4,555 +4,666 @@ namespace App\Http\Controllers\Api\ProgramB;
 
 use App\Http\Controllers\Controller;
 use App\Models\Application;
-use App\Models\CompanyChallenge;
-use App\Models\Mentorship;
+use App\Models\AuditEvent;
+use App\Models\Challenge;
+use App\Models\Evaluation;
 use App\Models\Milestone;
 use App\Models\Notification;
 use App\Models\Team;
-use App\Models\User;
+use App\Services\ActiveProjectGuard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class ApplicationController extends Controller
 {
+    public function __construct(private readonly ActiveProjectGuard $activeProjectGuard)
+    {
+    }
 
-private const ALLOWED_TRANSITIONS = [
-        'draft'              => ['submitted'],
-        'submitted'          => ['formally_verified', 'pending_supplement', 'rejected'],
-        'pending_supplement' => ['submitted'],
-        'formally_verified'  => ['in_evaluation', 'approved', 'rejected'],
-        'in_evaluation'      => ['approved', 'rejected'],
-        'approved'           => ['onboarding', 'archived'],
-        'onboarding'         => ['active', 'paused', 'archived'],
-        'active'             => ['completed', 'paused', 'archived'],
-        'paused'             => ['active', 'archived'],
-        'completed'          => ['archived'],
-        'rejected'           => ['archived'],
-        'archived'           => []
+    private const TRANSITIONS = [
+        'student' => [
+            'draft' => ['submitted'],
+            'pending_supplement' => ['submitted'],
+        ],
+        'company_contact' => [
+            'submitted' => ['in_evaluation', 'approved', 'rejected'],
+            'in_evaluation' => ['approved', 'rejected', 'pending_supplement'],
+            'approved' => ['onboarding', 'active'],
+            'onboarding' => ['active'],
+            'active' => ['completed'],
+            'completed' => ['archived'],
+        ],
+        'evaluator' => [
+            'submitted' => ['in_evaluation'],
+            'in_evaluation' => ['pending_supplement'],
+        ],
+        'nti_admin' => [
+            'draft' => ['submitted', 'formally_verified', 'in_evaluation', 'approved', 'rejected', 'onboarding', 'active', 'paused', 'completed', 'archived'],
+            'submitted' => ['formally_verified', 'in_evaluation', 'approved', 'rejected', 'onboarding', 'active', 'paused', 'completed', 'archived'],
+            'formally_verified' => ['submitted', 'in_evaluation', 'pending_supplement', 'approved', 'rejected', 'onboarding', 'active', 'paused', 'completed', 'archived'],
+            'in_evaluation' => ['submitted', 'formally_verified', 'pending_supplement', 'approved', 'rejected', 'onboarding', 'active', 'paused', 'completed', 'archived'],
+            'pending_supplement' => ['submitted', 'formally_verified', 'in_evaluation', 'approved', 'rejected', 'onboarding', 'active', 'paused', 'completed', 'archived'],
+            'approved' => ['submitted', 'formally_verified', 'in_evaluation', 'rejected', 'onboarding', 'active', 'paused', 'completed', 'archived'],
+            'rejected' => ['submitted', 'formally_verified', 'in_evaluation', 'approved', 'onboarding', 'active', 'paused', 'completed', 'archived'],
+            'onboarding' => ['submitted', 'formally_verified', 'in_evaluation', 'approved', 'rejected', 'active', 'paused', 'completed', 'archived'],
+            'active' => ['paused', 'completed', 'archived'],
+            'paused' => ['active', 'completed', 'archived'],
+            'completed' => ['archived'],
+            'archived' => [],
+        ],
+        'superadmin' => [
+            'draft' => ['submitted', 'formally_verified', 'in_evaluation', 'approved', 'rejected', 'onboarding', 'active', 'paused', 'completed', 'archived'],
+            'submitted' => ['formally_verified', 'in_evaluation', 'approved', 'rejected', 'onboarding', 'active', 'paused', 'completed', 'archived'],
+            'formally_verified' => ['submitted', 'in_evaluation', 'pending_supplement', 'approved', 'rejected', 'onboarding', 'active', 'paused', 'completed', 'archived'],
+            'in_evaluation' => ['submitted', 'formally_verified', 'pending_supplement', 'approved', 'rejected', 'onboarding', 'active', 'paused', 'completed', 'archived'],
+            'pending_supplement' => ['submitted', 'formally_verified', 'in_evaluation', 'approved', 'rejected', 'onboarding', 'active', 'paused', 'completed', 'archived'],
+            'approved' => ['submitted', 'formally_verified', 'in_evaluation', 'rejected', 'onboarding', 'active', 'paused', 'completed', 'archived'],
+            'rejected' => ['submitted', 'formally_verified', 'in_evaluation', 'approved', 'onboarding', 'active', 'paused', 'completed', 'archived'],
+            'onboarding' => ['submitted', 'formally_verified', 'in_evaluation', 'approved', 'rejected', 'active', 'paused', 'completed', 'archived'],
+            'active' => ['paused', 'completed', 'archived'],
+            'paused' => ['active', 'completed', 'archived'],
+            'completed' => ['archived'],
+            'archived' => [],
+        ],
     ];
 
-    /**
- * STUDENT VIEW: the current user's own Program B applications.
- */
-public function index(Request $request): JsonResponse
-{
-    $user = $request->user();
-
-    $teamIds = DB::table('team_members')
-        ->where('user_id', $user->id)
-        ->pluck('team_id');
-
-    $applications = Application::whereIn('team_id', $teamIds)
-        ->whereNotNull('challenge_id')
-        ->with(['challenge:id,title,status,company_id,budget', 'challenge.company:id,name', 'team:id,name'])
-        ->orderByDesc('created_at')
-        ->get();
-
-    return response()->json(['applications' => $applications], 200);
-}
-
-    /**
-     * STUDENT PROJECT VIEW: one application as a "project" — challenge, team,
-     * milestones, assigned mentor and the mentor's consultation feedback.
-     * Visible to the team's members, the owning company's managers,
-     * the assigned mentor, and NTI admins.
-     */
-    public function show(Request $request, Application $application): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        $isMember = DB::table('team_members')
-            ->where('team_id', $application->team_id)
-            ->where('user_id', $user->id)
-            ->exists();
-        $isAdmin   = in_array($user->account_type, ['nti_admin', 'superadmin'], true);
-        $isMentor  = $application->mentorships()->where('mentor_id', $user->id)->exists();
-        $manages   = $application->challenge && $application->challenge->company
-            && $user->can('manageChallenges', $application->challenge->company);
+        $query = Application::with([
+            'team.members',
+            'challenge.company',
+            'call.program',
+            'documents',
+            'mentorships.mentor',
+            'milestones',
+        ])->whereHas('call.program', fn ($q) => $q->where('type', 'program_b'));
 
-        if (! ($isMember || $isAdmin || $isMentor || $manages)) {
-            return response()->json(['message' => 'You do not have access to this project.'], 403);
+        if ($user->account_type === 'student') {
+            $query->whereHas('team.members', fn ($q) => $q->where('users.id', $user->id));
         }
 
-        $application->load([
-            'team:id,name',
-            'team.members:id,first_name,last_name,email',
-            'challenge:id,title,status,technical_spec,company_id,budget',
-            'challenge.company:id,name',
-            'milestones',
-            'mentorships.mentor:id,first_name,last_name',
-            'mentorships.consultations' => fn ($q) => $q->orderByDesc('scheduled_at'),
-        ]);
+        if ($user->account_type === 'company_contact') {
+            $query->whereHas('challenge.company.users', fn ($q) => $q->where('users.id', $user->id));
+        }
 
-        return response()->json(['application' => $application]);
+        if ($request->filled('challenge_id')) {
+            $query->where('challenge_id', $request->challenge_id);
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        return response()->json([
+            'applications' => $query->latest()->get(),
+        ]);
+    }
+
+    public function mine(Request $request): JsonResponse
+    {
+        $applications = Application::with([
+            'team.members',
+            'challenge.company',
+            'call.program',
+            'documents',
+            'mentorships.mentor',
+            'milestones',
+        ])
+            ->whereHas('call.program', fn ($q) => $q->where('type', 'program_b'))
+            ->whereHas('team.members', fn ($q) => $q->where('users.id', $request->user()->id))
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'applications' => $applications,
+        ]);
     }
 
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        $team = Team::with('members.profile')
-            ->where('leader_id', $user->id)
-            ->first();
-
-        if (!$team) {
-            return response()->json(['message' => 'Nie ste lídrom žiadneho tímu alebo tím neexistuje.'], 403);
-        }
-
-        $validated = $request->validate([
-            'call_id'           => 'required|uuid|exists:calls,id',
-            'challenge_id'      => 'required|uuid',
-            'motivation_letter' => 'nullable|string',
-            'solution_proposal' => 'nullable|string',
+        $data = $request->validate([
+            'challenge_id' => ['required', 'uuid', 'exists:challenges,id'],
+            'team_id' => ['required', 'uuid', 'exists:teams,id'],
+            'summary' => ['required', 'string', 'max:3000'],
+            'solution' => ['nullable', 'string', 'max:3000'],
+            'requested_budget' => ['nullable', 'numeric', 'min:0'],
         ]);
 
+        $challenge = Challenge::with(['call.program'])
+            ->where('id', $data['challenge_id'])
+            ->whereHas('call.program', fn ($q) => $q->where('type', 'program_b'))
+            ->firstOrFail();
 
-        if ($team->leader_id !== $user->id) {
-            return response()->json(['message' => 'Iba líder tímu môže podať prihlášku.'], 403);
+        if (!$challenge->call || $challenge->call->status !== 'open') {
+            return response()->json([
+                'message' => 'This challenge is not open for applications.',
+            ], 422);
         }
 
-        // 3. Business Logic: Ensure ALL team members have a CV uploaded
-        $missingCvs = [];
-        foreach ($team->members as $member) {
-            // Check if profile exists and if cv_url is filled
-            if (!$member->profile || empty($member->profile->cv_path)) {
-                $missingCvs[] = $member->first_name . ' ' . $member->last_name;
+        $team = Team::where('id', $data['team_id'])
+            ->whereHas('members', fn ($q) => $q->where('users.id', $user->id))
+            ->firstOrFail();
+
+        $activeConflict = $this->activeProjectGuard->findConflict($team, $challenge->call);
+
+        if ($activeConflict) {
+            return response()->json([
+                'message' => $this->activeProjectGuard->conflictMessage($activeConflict, $challenge->call),
+            ], 422);
+        }
+
+        $application = DB::transaction(function () use ($data, $challenge, $team) {
+            $duplicate = Application::where('challenge_id', $challenge->id)
+                ->where('team_id', $team->id)
+                ->whereNotIn('status', ['rejected', 'archived', 'completed'])
+                ->lockForUpdate()
+                ->exists();
+
+            if ($duplicate) {
+                return null;
             }
-        }
 
-//         If anyone is missing a CV, block the application
-        if (count($missingCvs) > 0) {
-            return response()->json([
-                'message' => 'Nemožno podať prihlášku. Nasledujúci členovia nemajú vo svojom profile nahraté CV: ' . implode(', ', $missingCvs)
-            ], 422);
-        }
-
-        $hasExistingApplication = DB::table('applications')
-            ->where('team_id', $team->id)
-            ->where('challenge_id', $validated['challenge_id'])
-            ->whereNotIn('status', ['rejected', 'archived'])
-            ->exists();
-
-        if ($hasExistingApplication) {
-            return response()->json([
-                'message' => 'Váš tím už podal prihlášku. Nemôžete podať viacero prihlášok súčasne.'
-            ], 422);
-        }
-
-        try {
-            // 4. Create the application without worrying about files
-            $application = Application::create([
-                'team_id'           => $team->id,
-                'call_id'           => $validated['call_id'],
-                'challenge_id'      => $validated['challenge_id'],
-                'motivation_letter' => $validated['motivation_letter'] ?? null,
-                'solution_proposal' => $validated['solution_proposal'] ?? null,
-                'status'            => 'submitted',
+            return Application::create([
+                'call_id' => $challenge->call_id,
+                'challenge_id' => $challenge->id,
+                'team_id' => $team->id,
+                'status' => 'submitted',
+                'summary' => $data['summary'],
+                'problem' => $challenge->description,
+                'solution' => $data['solution'] ?? null,
+                'requested_budget' => $data['requested_budget'] ?? null,
+                'submitted_at' => now(),
             ]);
+        });
 
-            // Notify the challenge's company managers about the new application.
-            $challenge = CompanyChallenge::find($validated['challenge_id']);
-            if ($challenge) {
-                $managerIds = User::where('company_id', $challenge->company_id)
-                    ->whereIn('company_role', ['owner', 'manager'])
-                    ->pluck('id');
-
-                Notification::notifyUsers(
-                    $managerIds,
-                    'application_received',
-                    'New application',
-                    "{$team->name} applied to your challenge \"{$challenge->title}\"."
-                );
-            }
-
+        if (!$application) {
             return response()->json([
-                'message' => 'Prihláška bola úspešne podaná.',
-                'application' => $application
-            ], 201);
-
-        } catch (\Exception $e) {
-            Log::error('Chyba pri podávaní prihlášky: ' . $e->getMessage());
-            return response()->json(['message' => 'Vyskytla sa chyba servera.'], 500);
+                'message' => 'This team already applied to this challenge.',
+            ], 422);
         }
+
+        $this->notifyCompanyAboutApplication($application);
+
+        return response()->json([
+            'message' => 'Application submitted.',
+            'application' => $application->load([
+                'team.members',
+                'challenge.company',
+                'call.program',
+                'documents',
+                'mentorships.mentor',
+                'milestones',
+            ]),
+        ], 201);
     }
-    /**
-     * Ensure the acting user may manage the company that owns this
-     * application's challenge. NTI admins bypass via CompanyPolicy::before().
-     */
-    private function authorizeCompanyAction(Request $request, Application $application): ?JsonResponse
+
+    public function show(Request $request, Application $application): JsonResponse
     {
-        $company = $application->challenge?->company;
+        $this->authorizeApplicationAccess($request, $application);
 
-        if (!$company || $request->user()->cannot('manageChallenges', $company)) {
-            return response()->json(['message' => 'Nemáte oprávnenie vykonať túto akciu.'], 403);
-        }
-
-        return null;
+        return response()->json([
+            'application' => $application->load([
+                'team.members.profile',
+                'challenge.company.users',
+                'call.program',
+                'documents',
+                'mentorships.mentor',
+                'milestones',
+            ]),
+        ]);
     }
 
-    /**
-     * COMPANY ACTION: Select a team for a challenge.
-     */
-    public function select(Request $request, Application $application): JsonResponse
+    public function update(Request $request, Application $application): JsonResponse
     {
-        if ($denied = $this->authorizeCompanyAction($request, $application)) {
-            return $denied;
+        $this->authorizeApplicationAccess($request, $application);
+
+        if (!in_array($application->status, ['submitted', 'pending_supplement'], true)) {
+            return response()->json([
+                'message' => 'Only submitted or supplement applications can be edited.',
+            ], 422);
         }
 
-        if ($application->status !== 'submitted') {
-            return response()->json(['message' => 'Túto prihlášku už nie je možné upravovať.'], 422);
-        }
+        $data = $request->validate([
+            'summary' => ['required', 'string', 'max:3000'],
+            'solution' => ['nullable', 'string', 'max:3000'],
+            'requested_budget' => ['nullable', 'numeric', 'min:0'],
+        ]);
 
-        try {
-            DB::transaction(function () use ($application) {
-                // 1. Approve current application
-                $application->update([
-                    'status' => 'approved',
-                    'decided_at' => now(),
-                ]);
-                if ($application->challenge) {
-                    $application->challenge->update([
-                        'team_id' => $application->team_id,
-                        'status'  => 'assigned'
-                    ]);
-                }
+        $application->update($data);
 
-                // 2. Automatically reject all other teams for THIS specific challenge
-                Application::where('challenge_id', $application->challenge_id)
-                    ->where('id', '!=', $application->id)
-                    ->update([
-                        'status' => 'rejected',
-                        'decided_at' => now(),
-                    ]);
-                Milestone::create([
-                    'application_id' => $application->id,
-                    'title'          => 'Výber tímu a začiatok spolupráce',
-                    'status'         => 'completed',
-                    'due_date'       => now(),
-                    'comment'        => 'Automaticky vytvorený míľnik po schválení tímu spoločnosťou.',
-                ]);
-            });
-
-            // Notify the chosen team and the teams that were auto-rejected.
-            $title = optional($application->challenge)->title ?? 'a challenge';
-
-            $selectedMembers = DB::table('team_members')
-                ->where('team_id', $application->team_id)
-                ->pluck('user_id');
-            Notification::notifyUsers(
-                $selectedMembers,
-                'team_selected',
-                'Your team was selected! 🎉',
-                "Your team was chosen for \"{$title}\"."
-            );
-
-            $rejectedTeamIds = Application::where('challenge_id', $application->challenge_id)
-                ->where('id', '!=', $application->id)
-                ->pluck('team_id');
-            $rejectedMembers = DB::table('team_members')
-                ->whereIn('team_id', $rejectedTeamIds)
-                ->pluck('user_id');
-            Notification::notifyUsers(
-                $rejectedMembers,
-                'team_rejected',
-                'Application update',
-                "Another team was selected for \"{$title}\"."
-            );
-
-            return response()->json(['message' => 'Team selected, others rejected.'], 200);
-        } catch (\Exception $e) {
-            Log::error('Selection error: ' . $e->getMessage());
-            return response()->json(['message' => 'Server error.'], 500);
-        }
+        return response()->json([
+            'message' => 'Application updated.',
+            'application' => $application->fresh([
+                'team.members',
+                'challenge.company',
+                'call.program',
+                'documents',
+                'mentorships.mentor',
+                'milestones',
+            ]),
+        ]);
     }
 
-    /**
-     * ADMIN ACTION: Assign university mentor to the project.
-     */
-    public function assignMentor(Request $request, Application $application): JsonResponse
+    public function choose(Request $request, Application $application): JsonResponse
     {
         $user = $request->user();
-        $isAdmin = in_array($user->account_type, ['nti_admin', 'superadmin'], true);
 
-        if (!$isAdmin) {
-            return response()->json(['message' => 'Nemáte oprávnenie pridat mentora.'], 403);
-        }
-
-        $validated = $request->validate(['mentor_id' => 'required|uuid|exists:users,id']);
-
-        try {
-            DB::transaction(function () use ($application, $validated) {
-                Mentorship::create([
-                    'application_id' => $application->id,
-                    'mentor_id'      => $validated['mentor_id'],
-                    'started_at'     => now(),
-                    'notes'          => 'Záznam o mentoringu vytvorený po výbere tímu.',
-                ]);
-            });
-
-            $title = optional($application->challenge)->title ?? 'a project';
-            Notification::notifyUser(
-                $validated['mentor_id'],
-                'mentor_assigned',
-                'New mentorship',
-                "You've been assigned as mentor for \"{$title}\"."
-            );
-
-            return response()->json(['message' => 'Mentor assigned.'], 200);
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Error.'], 500);
-        }
-    }
-
-    /**
-     * COMPANY ACTION: Assign Product Owner from company side.
-     */
-    public function assignPo(Request $request, Application $application): JsonResponse
-    {
-        if ($denied = $this->authorizeCompanyAction($request, $application)) {
-            return $denied;
-        }
-
-        $validated = $request->validate(['product_owner_id' => 'required|uuid|exists:users,id']);
-
-        $challenge = $application->challenge;
-        if (!$challenge) {
-            return response()->json(['message' => 'K prihláške nie je priradená žiadna výzva.'], 422);
-        }
-
-        // The Product Owner must be a member of the challenge's own company.
-        $po = User::find($validated['product_owner_id']);
-        if (!$po || $po->company_id !== $challenge->company_id) {
-            return response()->json(['message' => 'Product Owner musí byť členom vašej spoločnosti.'], 422);
-        }
-
-        try {
-            $challenge->update(['product_owner_id' => $validated['product_owner_id']]);
-            return response()->json(['message' => 'Product Owner assigned.'], 200);
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Error.'], 500);
-        }
-    }
-    /**
-     * COMPANY ACTION: Approve the final delivery of the project.
-     * Closes the application, the challenge, and adds the final milestone.
-     */
-    public function approveDelivery(Request $request, Application $application): JsonResponse
-    {
-        if ($denied = $this->authorizeCompanyAction($request, $application)) {
-            return $denied;
-        }
-
-        if ($application->status === 'archived') {
-            return response()->json(['message' => 'Tento projekt už je uzavretý.'], 422);
-        }
-
-        try {
-            DB::transaction(function () use ($application) {
-                $application->update([
-                    'status' => 'archived'
-                ]);
-
-                $challenge = CompanyChallenge::find($application->challenge_id);
-                if ($challenge) {
-                    $challenge->update([
-                        'status' => 'closed'
-                    ]);
-                }
-
-                Milestone::create([
-                    'application_id' => $application->id,
-                    'title'          => 'Finálne odovzdanie a schválenie projektu', // "Финальная сдача и одобрение проекта"
-                    'status'         => 'completed',
-                    'due_date'       => now(),
-                    'comment'        => 'Spoločnosť schválila finálne riešenie. Projekt je úspešne ukončený.',
-                ]);
-            });
-
-            // Notify the team and mentor that the project is completed.
-            $title = optional($application->challenge)->title ?? 'the project';
-            $memberIds = DB::table('team_members')->where('team_id', $application->team_id)->pluck('user_id');
-            Notification::notifyUsers(
-                $memberIds,
-                'project_completed',
-                'Project completed 🎉',
-                "Your project \"{$title}\" was approved and closed by the company."
-            );
-            Notification::notifyUsers(
-                $application->mentorships()->pluck('mentor_id'),
-                'project_completed',
-                'Project completed',
-                "The project \"{$title}\" you mentored was approved and closed."
-            );
-
+        if ($user->account_type !== 'company_contact' && !in_array($user->account_type, ['nti_admin', 'superadmin'], true)) {
             return response()->json([
-                'message' => 'Projekt bol úspešne schválený a uzavretý.',
-                'application' => $application->fresh()
-            ], 200);
-
-        } catch (\Exception $e) {
-            Log::error('Approve delivery error: ' . $e->getMessage());
-            return response()->json(['message' => 'Vyskytla sa chyba pri uzatváraní projektu.'], 500);
+                'message' => 'Only company contacts or admins can choose a team.',
+            ], 403);
         }
+
+        $application->loadMissing(['team.members', 'call', 'challenge.company.users']);
+
+        if (!$application->challenge || !$application->challenge->company) {
+            return response()->json([
+                'message' => 'This application is not connected to a company challenge.',
+            ], 422);
+        }
+
+        if ($user->account_type === 'company_contact') {
+            $belongsToCompany = $application->challenge->company->users()
+                ->where('users.id', $user->id)
+                ->exists();
+
+            if (!$belongsToCompany) {
+                return response()->json([
+                    'message' => 'This challenge does not belong to your company.',
+                ], 403);
+            }
+        }
+
+        if (!in_array($application->status, ['submitted', 'in_evaluation', 'approved'], true)) {
+            return response()->json([
+                'message' => 'Only submitted or evaluated applications can be selected.',
+            ], 422);
+        }
+
+        if ($application->team && $application->call) {
+            $activeConflict = $this->activeProjectGuard->findConflict($application->team, $application->call);
+
+            if ($activeConflict && $activeConflict->id !== $application->id) {
+                return response()->json([
+                    'message' => $this->activeProjectGuard->conflictMessage($activeConflict, $application->call),
+                ], 422);
+            }
+        }
+
+        DB::transaction(function () use ($application) {
+            $application->update([
+                'status' => 'approved',
+                'decided_at' => now(),
+            ]);
+
+            if ($application->challenge) {
+                $application->challenge->update([
+                    'team_id' => $application->team_id,
+                    'status' => 'assigned',
+                ]);
+            }
+
+            Application::where('challenge_id', $application->challenge_id)
+                ->where('id', '!=', $application->id)
+                ->whereNotIn('status', ['rejected', 'archived', 'completed'])
+                ->update([
+                    'status' => 'rejected',
+                    'decided_at' => now(),
+                ]);
+
+            Milestone::create([
+                'application_id' => $application->id,
+                'title' => 'Team selection and cooperation start',
+                'status' => 'completed',
+                'due_date' => now(),
+                'comment' => 'Automatically created after company selected the team.',
+            ]);
+        });
+
+        $this->notifyTeamMembers(
+            $application,
+            'team_selected',
+            'Your team was selected!',
+            'Your team was selected for the company challenge.'
+        );
+
+        return response()->json([
+            'message' => 'Team selected and other applications rejected.',
+            'application' => $application->fresh([
+                'team.members',
+                'challenge.company',
+                'call.program',
+                'documents',
+                'mentorships.mentor',
+                'milestones',
+            ]),
+        ]);
     }
-public function transition(Request $request, Application $application): JsonResponse
+
+    public function start(Request $request, Application $application): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!in_array($user->account_type, ['company_contact', 'nti_admin', 'superadmin'], true)) {
+            return response()->json([
+                'message' => 'Only company contacts or admins can start cooperation.',
+            ], 403);
+        }
+
+        $application->loadMissing(['team.members', 'call', 'challenge.company.users']);
+
+        if ($user->account_type === 'company_contact') {
+            $belongsToCompany = $application->challenge?->company?->users()
+                ->where('users.id', $user->id)
+                ->exists();
+
+            if (!$belongsToCompany) {
+                return response()->json([
+                    'message' => 'This challenge does not belong to your company.',
+                ], 403);
+            }
+        }
+
+        if (!in_array($application->status, ['approved', 'onboarding'], true)) {
+            return response()->json([
+                'message' => 'Only approved or onboarding applications can be started.',
+            ], 422);
+        }
+
+        if ($application->team && $application->call) {
+            $activeConflict = $this->activeProjectGuard->findConflict($application->team, $application->call);
+
+            if ($activeConflict && $activeConflict->id !== $application->id) {
+                return response()->json([
+                    'message' => $this->activeProjectGuard->conflictMessage($activeConflict, $application->call),
+                ], 422);
+            }
+        }
+
+        $application->update([
+            'status' => 'active',
+        ]);
+
+        Milestone::firstOrCreate(
+            [
+                'application_id' => $application->id,
+                'title' => 'Project started',
+            ],
+            [
+                'status' => 'completed',
+                'due_date' => now(),
+                'comment' => 'Project was started.',
+            ]
+        );
+
+        $this->notifyTeamMembers(
+            $application,
+            'project_started',
+            'Project started',
+            'Your project was started.'
+        );
+
+        return response()->json([
+            'message' => 'Project started.',
+            'application' => $application->fresh([
+                'team.members',
+                'challenge.company',
+                'call.program',
+                'documents',
+                'mentorships.mentor',
+                'milestones',
+            ]),
+        ]);
+    }
+
+    public function transition(Request $request, Application $application): JsonResponse
     {
         $user = $request->user();
 
         $validated = $request->validate([
-            'status'         => 'required|string|in:draft,submitted,formally_verified,in_evaluation,pending_supplement,approved,rejected,onboarding,active,paused,completed,archived',
-            'decision_notes' => 'nullable|string',
-            'score'          => 'nullable|numeric|min:0|max:100',
+            'status' => ['required', 'string', 'in:draft,submitted,formally_verified,in_evaluation,pending_supplement,approved,rejected,onboarding,active,paused,completed,archived'],
+            'decision_notes' => ['nullable', 'string'],
+            'score' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'comment' => ['nullable', 'string', 'max:2000'],
         ]);
 
         $newStatus = $validated['status'];
-        $currentStatus = $application->status;
-        $allowed = self::ALLOWED_TRANSITIONS[$currentStatus] ?? [];
-        $isAdmin = in_array($user->account_type, ['nti_admin', 'superadmin']);
-        $isCompany = $user->account_type === 'company_contact';
-        $isEvaluator = $user->account_type === 'evaluator';
+        $oldStatus = $application->status;
 
-        if (!in_array($newStatus, $allowed)) {
+        $allowed = self::TRANSITIONS[$user->account_type][$oldStatus] ?? [];
+
+        if (!in_array($newStatus, $allowed, true) && $oldStatus !== $newStatus) {
             return response()->json([
-                'message' => "Neregulárny prechod zo stavu '{$currentStatus}' do stavu '{$newStatus}'."
+                'message' => "Transition from '{$oldStatus}' to '{$newStatus}' is not permitted for your role.",
             ], 422);
         }
 
         if ($newStatus === 'submitted') {
-            if (!$isAdmin && $application->team->leader_id !== $user->id) {
-                return response()->json(['message' => 'Iba líder tímu môže podať prihlášku.'], 403);
+            $application->loadMissing('team.members.profile');
+
+            if (!in_array($user->account_type, ['nti_admin', 'superadmin'], true)) {
+                if (!$application->team || $application->team->leader_id !== $user->id) {
+                    return response()->json([
+                        'message' => 'Only the team leader can submit the application.',
+                    ], 403);
+                }
             }
 
             $missingCvs = [];
-            $application->loadMissing('team.members.profile');
 
-            foreach ($application->team->members as $member) {
-                if (!$member->profile || empty($member->profile->cv_path)) {
-                    $missingCvs[] = $member->first_name . ' ' . $member->last_name;
+            if ($application->team) {
+                foreach ($application->team->members as $member) {
+                    if (!$member->profile || empty($member->profile->cv_path)) {
+                        $missingCvs[] = $member->first_name . ' ' . $member->last_name;
+                    }
                 }
             }
 
             if (!empty($missingCvs)) {
                 return response()->json([
-                    'message' => 'Nemožno podať prihlášku. Nasledujúci členovia nemajú vo svojom profile nahraté CV: ' . implode(', ', $missingCvs)
+                    'message' => 'Cannot submit. Missing CVs: ' . implode(', ', $missingCvs),
                 ], 422);
             }
+        }
 
-            $application->submitted_at = now();
-        } else {
-            $companyAllowed = ['approved', 'rejected'];
-            $evaluatorAllowed = ['formally_verified', 'in_evaluation', 'pending_supplement'];
+        if (in_array($newStatus, ['approved', 'onboarding', 'active'], true)) {
+            $application->loadMissing(['team.members', 'call']);
 
-            if (!$isAdmin) {
-                if ($isCompany && !in_array($newStatus, $companyAllowed)) {
-                    return response()->json(['message' => 'Nedostatočné oprávnenia pre tento prechod stavu.'], 403);
-                } elseif ($isEvaluator && !in_array($newStatus, $evaluatorAllowed)) {
-                    return response()->json(['message' => 'Nedostatočné oprávnenia pre tento prechod stavu.'], 403);
-                } elseif (!$isCompany && !$isEvaluator) {
-                    return response()->json(['message' => 'Nedostatočné oprávnenia pre tento prechod stavu.'], 403);
+            if ($application->team && $application->call) {
+                $activeConflict = $this->activeProjectGuard->findConflict($application->team, $application->call);
+
+                if ($activeConflict && $activeConflict->id !== $application->id) {
+                    return response()->json([
+                        'message' => $this->activeProjectGuard->conflictMessage($activeConflict, $application->call),
+                    ], 422);
                 }
             }
+        }
 
-            if (!$isAdmin) {
-                return response()->json(['message' => 'Nedostatočné oprávnenia pre tento prechod stavu.'], 403);
+        $application->loadMissing(['team.members', 'call']);
+
+        DB::transaction(function () use ($application, $newStatus, $oldStatus, $validated, $user) {
+            $update = [
+                'status' => $newStatus,
+            ];
+
+            if ($newStatus === 'submitted' && !$application->submitted_at) {
+                $update['submitted_at'] = now();
             }
 
             if (array_key_exists('decision_notes', $validated)) {
-                $application->decision_notes = $validated['decision_notes'];
+                $update['decision_notes'] = $validated['decision_notes'];
             }
 
-            if (in_array($newStatus, ['approved', 'rejected'])) {
-                $application->score = $validated['score'] ?? null;
-                $application->decided_at = now();
+            if (in_array($newStatus, ['approved', 'rejected'], true)) {
+                $update['score'] = $validated['score'] ?? null;
+                $update['decided_at'] = now();
             }
-        }
 
-        $application->status = $newStatus;
-        $application->save();
+            $application->update($update);
 
-        $application->load([
-            'team.members.profile',
-            'call.program',
-            'challenge',
-            'milestones',
-            'mentorships.mentor'
+            AuditEvent::create([
+                'user_id' => $user->id,
+                'action' => 'application_status_changed',
+                'entity_type' => Application::class,
+                'entity_id' => $application->id,
+                'properties' => [
+                    'from' => $oldStatus,
+                    'to' => $newStatus,
+                    'comment' => $validated['comment'] ?? $validated['decision_notes'] ?? null,
+                ],
+            ]);
+
+            if ($application->team) {
+                foreach ($application->team->members as $member) {
+                    Notification::create([
+                        'user_id' => $member->id,
+                        'type' => 'application_status_changed',
+                        'title' => 'Application status changed',
+                        'message' => "Your application status changed to {$newStatus}.",
+                        'data' => [
+                            'application_id' => $application->id,
+                            'from' => $oldStatus,
+                            'to' => $newStatus,
+                        ],
+                    ]);
+
+                    if ($newStatus === 'completed') {
+                        Notification::create([
+                            'user_id' => $member->id,
+                            'type' => 'project_completed',
+                            'title' => 'Project completed',
+                            'message' => 'Congratulations! Your project has been marked as completed.',
+                            'data' => [
+                                'application_id' => $application->id,
+                            ],
+                        ]);
+                    }
+                }
+            }
+        });
+
+        return response()->json([
+            'message' => 'Application status updated.',
+            'application' => $application->fresh([
+                'team.members',
+                'challenge.company',
+                'call.program',
+                'documents',
+                'mentorships.mentor',
+                'milestones',
+            ]),
         ]);
-
-        $application->setAttribute(
-            'available_transitions',
-            self::ALLOWED_TRANSITIONS[$application->status] ?? []
-        );
-
-        return response()->json($application, 200);
     }
 
-    private function canManageProject(Request $request, Application $application): bool
+    public function evaluate(Request $request, Application $application): JsonResponse
     {
         $user = $request->user();
 
-        if (in_array($user->account_type, ['nti_admin', 'superadmin'], true)) {
-            return true;
-        }
-        if ($application->mentorships()->where('mentor_id', $user->id)->exists()) {
-            return true;
-        }
-        $company = $application->challenge?->company;
-
-        return $company && $user->can('manageChallenges', $company);
-    }
-
-    public function storeMilestone(Request $request, Application $application): JsonResponse
-    {
-        if (!$this->canManageProject($request, $application)) {
-            return response()->json(['message' => 'Nemáte oprávnenie spravovať tento projekt.'], 403);
+        if (!in_array($user->account_type, ['evaluator', 'nti_admin', 'superadmin'], true)) {
+            return response()->json([
+                'message' => 'Only evaluators or admins can evaluate applications.',
+            ], 403);
         }
 
-        $validated = $request->validate([
-            'title'    => 'required|string|max:255',
-            'status'   => 'nullable|in:pending,in_progress,completed,overdue',
-            'due_date' => 'nullable|date',
-            'comment'  => 'nullable|string',
+        $data = $request->validate([
+            'score_innovation' => ['required', 'integer', 'min:0', 'max:10'],
+            'score_feasibility' => ['required', 'integer', 'min:0', 'max:10'],
+            'score_impact' => ['required', 'integer', 'min:0', 'max:10'],
+            'comment' => ['nullable', 'string', 'max:3000'],
         ]);
 
-        $milestone = Milestone::create([
-            'application_id' => $application->id,
-            'title'          => $validated['title'],
-            'status'         => $validated['status'] ?? 'pending',
-            'due_date'       => $validated['due_date'] ?? null,
-            'comment'        => $validated['comment'] ?? null,
-        ]);
-
-        $memberIds = DB::table('team_members')->where('team_id', $application->team_id)->pluck('user_id');
-        Notification::notifyUsers(
-            $memberIds,
-            'milestone_added',
-            'New milestone',
-            "A new milestone was added to your project: \"{$milestone->title}\"."
+        $evaluation = Evaluation::updateOrCreate(
+            [
+                'application_id' => $application->id,
+                'evaluator_id' => $user->id,
+            ],
+            $data
         );
 
-        return response()->json(['message' => 'Milestone created.', 'milestone' => $milestone], 201);
+        return response()->json([
+            'message' => 'Evaluation saved.',
+            'evaluation' => $evaluation,
+        ]);
     }
 
-    public function updateMilestone(Request $request, Application $application, Milestone $milestone): JsonResponse
+    private function authorizeApplicationAccess(Request $request, Application $application): void
     {
-        if (!$this->canManageProject($request, $application)) {
-            return response()->json(['message' => 'Nemáte oprávnenie spravovať tento projekt.'], 403);
+        $user = $request->user();
+
+        if (in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator', 'mentor'], true)) {
+            return;
         }
-        if ($milestone->application_id !== $application->id) {
-            return response()->json(['message' => 'Milestone not found.'], 404);
+
+        if ($user->account_type === 'student') {
+            abort_unless(
+                $application->team()->whereHas('members', fn ($q) => $q->where('users.id', $user->id))->exists(),
+                403
+            );
+
+            return;
         }
 
-        $validated = $request->validate([
-            'title'    => 'sometimes|required|string|max:255',
-            'status'   => 'sometimes|required|in:pending,in_progress,completed,overdue',
-            'due_date' => 'nullable|date',
-            'comment'  => 'nullable|string',
-        ]);
+        if ($user->account_type === 'company_contact') {
+            abort_unless(
+                $application->challenge()
+                    ->whereHas('company.users', fn ($q) => $q->where('users.id', $user->id))
+                    ->exists(),
+                403
+            );
 
-        $milestone->update($validated);
+            return;
+        }
 
-        return response()->json(['message' => 'Milestone updated.', 'milestone' => $milestone->fresh()]);
-       }
+        abort(403);
+    }
+
+    private function notifyCompanyAboutApplication(Application $application): void
+    {
+        $application->loadMissing(['team', 'challenge.company.users']);
+
+        if (!$application->challenge || !$application->challenge->company) {
+            return;
+        }
+
+        foreach ($application->challenge->company->users as $user) {
+            Notification::create([
+                'user_id' => $user->id,
+                'type' => 'application_received',
+                'title' => 'New application',
+                'message' => "{$application->team?->name} applied to your challenge \"{$application->challenge->title}\".",
+                'data' => [
+                    'application_id' => $application->id,
+                    'challenge_id' => $application->challenge_id,
+                ],
+            ]);
+        }
+    }
+
+    private function notifyTeamMembers(Application $application, string $type, string $title, string $message): void
+    {
+        $application->loadMissing('team.members');
+
+        if (!$application->team) {
+            return;
+        }
+
+        foreach ($application->team->members as $member) {
+            Notification::create([
+                'user_id' => $member->id,
+                'type' => $type,
+                'title' => $title,
+                'message' => $message,
+                'data' => [
+                    'application_id' => $application->id,
+                    'challenge_id' => $application->challenge_id,
+                ],
+            ]);
+        }
+    }
 }
