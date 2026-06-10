@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Admin\AdminContentController;
 use App\Http\Controllers\Api\Admin\AdminProgramController;
 use App\Http\Controllers\Api\Admin\AdminReportController;
 use App\Http\Controllers\Api\Admin\DashboardController;
+use App\Http\Controllers\Api\GdprController;
 use App\Http\Controllers\Api\Mentor\MentorshipController as MentorMentorshipController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
@@ -18,7 +19,6 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\UserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\GdprController;
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
@@ -33,6 +33,7 @@ Route::get('/program-b/companies/invitations/{token}', [CompanyMemberController:
 Route::middleware('auth:api')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+
     Route::get('/gdpr/export', [GdprController::class, 'export']);
     Route::post('/gdpr/request-deletion', [GdprController::class, 'requestDeletion']);
     Route::post('/gdpr/cancel-deletion', [GdprController::class, 'cancelDeletion']);
@@ -70,10 +71,11 @@ Route::middleware('auth:api')->group(function () {
 
     Route::post('/program-a/invitations/accept', [TeamInvitationController::class, 'accept']);
     Route::post('/program-b/companies/invitations/accept', [CompanyMemberController::class, 'accept']);
+    Route::post('/program-b/companies/invitations/reject', [CompanyMemberController::class, 'reject']);
 
     Route::middleware(['role:nti_admin,superadmin', 'admin.audit'])->prefix('admin')->group(function () {
-
         Route::get('/dashboard', [DashboardController::class, 'index']);
+
         Route::post('/users/{id}/approve-deletion', [AdminController::class, 'approveDeletion']);
         Route::post('/users/{id}/reject-deletion', [AdminController::class, 'rejectDeletion']);
 

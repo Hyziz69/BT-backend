@@ -13,11 +13,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:api')->prefix('program-b')->name('program-b.')->group(function () {
 
-    // Programs & Calls
     Route::get('programs', [ProgramController::class, 'index'])->name('programs.index');
     Route::get('calls', [CallController::class, 'index'])->name('calls.index');
 
-    // Teams
     Route::prefix('teams')->name('teams.')->group(function () {
         Route::get('/', [TeamController::class, 'index'])->name('index');
         Route::post('/', [TeamController::class, 'store'])->name('store');
@@ -29,7 +27,6 @@ Route::middleware('auth:api')->prefix('program-b')->name('program-b.')->group(fu
         Route::delete('/{team}/members/{user}', [TeamController::class, 'kickMember'])->name('members.kick');
     });
 
-    // Applications
     Route::prefix('applications')->name('applications.')->group(function () {
         Route::get('/', [ApplicationController::class, 'index'])->name('index');
         Route::get('/{application}', [ApplicationController::class, 'show'])->name('show');
@@ -42,28 +39,25 @@ Route::middleware('auth:api')->prefix('program-b')->name('program-b.')->group(fu
         Route::patch('/{application}/milestones/{milestone}', [ApplicationController::class, 'updateMilestone'])->name('milestones.update');
     });
 
-    // Mentorship
     Route::prefix('applications/{application}/mentorships')->name('applications.mentorships.')->group(function () {
         Route::get('/', [MentorshipController::class, 'index'])->name('index');
         Route::post('/', [MentorshipController::class, 'store'])->name('store');
         Route::patch('/{mentorship}/end', [MentorshipController::class, 'end'])->name('end');
     });
 
-    // Companies
     Route::prefix('companies')->name('companies.')->group(function () {
         Route::post('/register', [CompanyController::class, 'register'])->name('register');
         Route::get('/{company}', [CompanyController::class, 'show'])->name('show');
         Route::put('/{company}', [CompanyController::class, 'update'])->name('update');
 
-        // Member management (owner-driven)
         Route::get('/{company}/members', [CompanyMemberController::class, 'index'])->name('members.index');
         Route::post('/{company}/members/invite', [CompanyMemberController::class, 'invite'])->name('members.invite');
+        Route::delete('/{company}/members/invitations/{invitation}', [CompanyMemberController::class, 'cancelInvitation'])->name('members.invitations.cancel');
         Route::post('/{company}/members/leave', [CompanyMemberController::class, 'leave'])->name('members.leave');
         Route::patch('/{company}/members/{user}', [CompanyMemberController::class, 'updateRole'])->name('members.update');
         Route::delete('/{company}/members/{user}', [CompanyMemberController::class, 'kick'])->name('members.kick');
     });
 
-    // Company Challenges
     Route::prefix('challenges')->name('challenges.')->group(function () {
         Route::get('/', [CompanyChallengeController::class, 'index'])->name('index');
         Route::post('/', [CompanyChallengeController::class, 'store'])->name('store');
@@ -73,8 +67,6 @@ Route::middleware('auth:api')->prefix('program-b')->name('program-b.')->group(fu
         Route::patch('/{challenge}/status', [CompanyChallengeController::class, 'updateStatus'])->name('status.update');
     });
 
-    // Student Profile
     Route::get('/profile', [StudentProfileController::class, 'show'])->name('profile.show');
     Route::post('/profile', [StudentProfileController::class, 'update'])->name('profile.update');
 });
-
