@@ -15,31 +15,36 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\Evaluation;
 use App\Models\Notification;
+use App\Services\ActiveProjectGuard;
 
 class ApplicationController extends Controller
 {
+    public function __construct(private readonly ActiveProjectGuard $activeProjectGuard)
+    {
+    }
+
     private const TRANSITIONS = [
-    'student' => [
-        'draft'              => ['submitted'],
-        'pending_supplement' => ['submitted'],
-    ],
-    'nti_admin' => [
-        'submitted'          => ['formally_verified', 'rejected'],
-        'formally_verified'  => ['in_evaluation', 'pending_supplement'],
-        'in_evaluation'      => ['pending_supplement', 'approved', 'rejected'],
-        'approved'           => ['onboarding'],
-        'onboarding'         => ['active'],
-        'active'             => ['paused', 'completed'],
-        'paused'             => ['active', 'completed'],
-        'completed'          => ['archived'],
-    ],
-    'evaluator' => [
-        'formally_verified' => ['in_evaluation', 'pending_supplement'],
-    ],
-    'company_contact' => [
-        'submitted' => ['approved'],
-    ],
-];
+        'student' => [
+            'draft'              => ['submitted'],
+            'pending_supplement' => ['submitted'],
+        ],
+        'nti_admin' => [
+            'submitted'          => ['formally_verified', 'rejected'],
+            'formally_verified'  => ['in_evaluation', 'pending_supplement'],
+            'in_evaluation'      => ['pending_supplement', 'approved', 'rejected'],
+            'approved'           => ['onboarding'],
+            'onboarding'         => ['active'],
+            'active'             => ['paused', 'completed'],
+            'paused'             => ['active', 'completed'],
+            'completed'          => ['archived'],
+        ],
+        'evaluator' => [
+            'formally_verified' => ['in_evaluation', 'pending_supplement'],
+        ],
+        'company_contact' => [
+            'submitted' => ['approved'],
+        ],
+    ];
 
     public function index(Request $request): JsonResponse
     {
@@ -75,6 +80,7 @@ class ApplicationController extends Controller
     public function store(StoreApplicationRequest $request): JsonResponse
     {
         $user = $request->user();
+
         $call = Call::with('program')
             ->where('id', $request->call_id)
             ->where('status', 'open')
@@ -82,6 +88,14 @@ class ApplicationController extends Controller
             ->firstOrFail();
 
         $team = $user->ledTeams()->findOrFail($request->team_id);
+
+        $activeConflict = $this->activeProjectGuard->findConflict($team, $call);
+
+        if ($activeConflict) {
+            return response()->json([
+                'message' => $this->activeProjectGuard->conflictMessage($activeConflict, $call),
+            ], 422);
+        }
 
         $application = DB::transaction(function () use ($call, $team, $request) {
             $duplicate = Application::where('call_id', $call->id)
@@ -94,14 +108,18 @@ class ApplicationController extends Controller
                 return null;
             }
 
-            return Application::create([
-                'call_id'           => $call->id,
-                'team_id'           => $team->id,
-                'challenge_id'      => null,
-                'status'            => 'draft',
-                'motivation_letter' => $request->motivation_letter,
-                'solution_proposal' => $request->solution_proposal,
+            $application = Application::create([
+                'call_id' => $call->id,
+                'team_id' => $team->id,
+                'status' => 'draft',
+                'summary' => $request->summary,
+                'problem' => $request->problem,
+                'solution' => $request->solution,
+                'requested_budget' => $request->requested_budget,
+                'submitted_at' => null,
             ]);
+
+            return $application;
         });
 
         if (!$application) {
@@ -110,174 +128,159 @@ class ApplicationController extends Controller
             ], 422);
         }
 
-        $this->auditLog($user, 'application.created', $application);
-
         return response()->json([
-            'message' => 'Application draft created.',
-            'data'    => new ApplicationResource($application->load(['team', 'call', 'documents'])),
+            'message' => 'Application created.',
+            'data' => new ApplicationResource($application->load(['team', 'call.program', 'documents', 'evaluations'])),
         ], 201);
-    }
-
-    public function destroy(Request $request, Application $application): JsonResponse
-    {
-        $user = $request->user();
-
-        if ($application->team->leader_id !== $user->id && !in_array($user->account_type, ['nti_admin', 'superadmin'])) {
-            return response()->json(['message' => 'Only the team leader can delete an application.'], 403);
-        }
-
-        if (!in_array($application->status, ['draft']) && !in_array($user->account_type, ['nti_admin', 'superadmin'])) {
-            return response()->json(['message' => 'Only draft applications can be deleted.'], 422);
-        }
-
-        $application->delete();
-
-        return response()->json(['message' => 'Application deleted.']);
     }
 
     public function show(Request $request, Application $application): JsonResponse
     {
-        $this->authorizeView($request->user(), $application);
+        $this->authorizeView($request, $application);
 
         return response()->json([
             'data' => new ApplicationResource(
-                $application->load(['team.members', 'call.program', 'documents', 'evaluations.evaluator', 'mentorships.mentor', 'milestones'])
+                $application->load(['team.members', 'call.program', 'documents', 'evaluations.evaluator', 'mentorships.mentor'])
             ),
         ]);
     }
 
     public function update(UpdateApplicationRequest $request, Application $application): JsonResponse
     {
-        $user = $request->user();
-        $this->authorizeTeamLeaderOfApplication($user, $application);
+        $this->authorizeView($request, $application);
 
-        if (!in_array($application->status, ['draft', 'pending_supplement'])) {
+        if (!in_array($application->status, ['draft', 'pending_supplement'], true)) {
             return response()->json([
-                'message' => 'Application can only be edited in draft or pending_supplement status.',
+                'message' => 'Only draft or supplement applications can be edited.',
             ], 422);
         }
 
-        $application->update($request->only(['motivation_letter', 'solution_proposal']));
+        $application->update($request->only([
+            'summary',
+            'problem',
+            'solution',
+            'requested_budget',
+        ]));
 
         return response()->json([
             'message' => 'Application updated.',
-            'data'    => new ApplicationResource($application->load(['team', 'call', 'documents'])),
+            'data' => new ApplicationResource($application->load(['team', 'call.program', 'documents', 'evaluations'])),
         ]);
     }
 
     public function transition(TransitionApplicationRequest $request, Application $application): JsonResponse
     {
-        $user       = $request->user();
-        $newStatus  = $request->status;
-        $roleKey    = $this->resolveRoleKey($user->account_type);
+        $user = $request->user();
+        $toStatus = $request->status;
+        $fromStatus = $application->status;
 
-        if ($roleKey === 'student') {
-            $this->authorizeTeamLeaderOfApplication($user, $application);
-        }
+        $roleTransitions = self::TRANSITIONS[$user->account_type] ?? [];
+        $allowed = $roleTransitions[$fromStatus] ?? [];
 
-        $allowed = self::TRANSITIONS[$roleKey][$application->status] ?? [];
-
-        if (!in_array($newStatus, $allowed)) {
+        if (!in_array($toStatus, $allowed, true) && !in_array($user->account_type, ['superadmin'], true)) {
             return response()->json([
-                'message' => "Transition from '{$application->status}' to '{$newStatus}' is not permitted for your role.",
-            ], 422);
+                'message' => 'This status transition is not allowed for your role.',
+            ], 403);
         }
 
-        DB::transaction(function () use ($application, $newStatus, $request, $user) {
-            $updates = ['status' => $newStatus];
+        if (in_array($toStatus, ['approved', 'onboarding', 'active'], true)) {
+            $application->loadMissing(['team.members', 'call']);
 
-            if ($newStatus === 'submitted') {
-                $updates['submitted_at'] = now();
+            if ($application->team && $application->call) {
+                $activeConflict = $this->activeProjectGuard->findConflict($application->team, $application->call);
 
-                $this->assertRequiredDocuments($application);
+                if ($activeConflict && $activeConflict->id !== $application->id) {
+                    return response()->json([
+                        'message' => $this->activeProjectGuard->conflictMessage($activeConflict, $application->call),
+                    ], 422);
+                }
             }
+        }
 
-            if (in_array($newStatus, ['approved', 'rejected'])) {
-                $updates['decided_at']      = now();
-                $updates['decision_notes']  = $request->decision_notes;
-            }
-
-            $application->update($updates);
-            $this->auditLog($user, 'application.status_changed', $application, [
-                'from'  => $application->getOriginal('status'),
-                'to'    => $newStatus,
-                'notes' => $request->decision_notes,
+        DB::transaction(function () use ($application, $toStatus, $request, $fromStatus, $user) {
+            $application->update([
+                'status' => $toStatus,
+                'submitted_at' => $toStatus === 'submitted' ? now() : $application->submitted_at,
+                'decided_at' => in_array($toStatus, ['approved', 'rejected'], true) ? now() : $application->decided_at,
             ]);
 
-            $memberIds = $application->team->members()->pluck('users.id');
-            \App\Models\Notification::notifyUsers(
-                $memberIds,
-                'application_status_changed',
-                'Application status updated',
-                "Your application status changed to '{$newStatus}'."
-            );
+            AuditEvent::create([
+                'user_id' => $user->id,
+                'action' => 'application_status_changed',
+                'entity_type' => Application::class,
+                'entity_id' => $application->id,
+                'properties' => [
+                    'from' => $fromStatus,
+                    'to' => $toStatus,
+                    'comment' => $request->comment,
+                ],
+            ]);
+
+            if ($application->team) {
+                foreach ($application->team->members as $member) {
+                    Notification::create([
+                        'user_id' => $member->id,
+                        'type' => 'application_status_changed',
+                        'title' => 'Application status changed',
+                        'message' => "Your application status changed to {$toStatus}.",
+                        'data' => [
+                            'application_id' => $application->id,
+                            'from' => $fromStatus,
+                            'to' => $toStatus,
+                        ],
+                    ]);
+                }
+            }
         });
 
         return response()->json([
-            'message' => "Application status changed to '{$newStatus}'.",
-            'data'    => new ApplicationResource($application->fresh(['team', 'call', 'documents'])),
+            'message' => 'Application status updated.',
+            'data' => new ApplicationResource($application->fresh(['team', 'call.program', 'documents', 'evaluations'])),
         ]);
     }
 
-    private function resolveRoleKey(string $accountType): string
+    public function evaluate(Request $request, Application $application): JsonResponse
     {
-        return match ($accountType) {
-            'student', 'team_leader' => 'student',
-            'nti_admin', 'superadmin' => 'nti_admin',
-            'evaluator'              => 'evaluator',
-            'company_contact'        => 'company_contact',
-            default                  => 'student',
-        };
-    }
+        $user = $request->user();
 
-    private function assertRequiredDocuments(Application $application): void
-    {
-        $required = [
-            'executive_summary',
-            'tech_architecture',
-            'roadmap',
-            'budget',
-            'risk_analysis',
-            'monetization',
-        ];
-
-        $uploaded = $application->documents()->pluck('doc_type')->toArray();
-        $missing  = array_diff($required, $uploaded);
-
-        if (!empty($missing)) {
-            abort(422, 'Missing required documents: ' . implode(', ', $missing));
+        if (!in_array($user->account_type, ['evaluator', 'nti_admin', 'superadmin'], true)) {
+            return response()->json([
+                'message' => 'Only evaluators or admins can evaluate applications.',
+            ], 403);
         }
+
+        $data = $request->validate([
+            'score_innovation' => ['required', 'integer', 'min:0', 'max:10'],
+            'score_feasibility' => ['required', 'integer', 'min:0', 'max:10'],
+            'score_impact' => ['required', 'integer', 'min:0', 'max:10'],
+            'comment' => ['nullable', 'string', 'max:3000'],
+        ]);
+
+        $evaluation = Evaluation::updateOrCreate(
+            [
+                'application_id' => $application->id,
+                'evaluator_id' => $user->id,
+            ],
+            $data
+        );
+
+        return response()->json([
+            'message' => 'Evaluation saved.',
+            'data' => $evaluation,
+        ]);
     }
 
-    private function authorizeView($user, Application $application): void
+    private function authorizeView(Request $request, Application $application): void
     {
-        if (in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator', 'mentor', 'company_contact'])) {
+        $user = $request->user();
+
+        if (in_array($user->account_type, ['nti_admin', 'superadmin', 'evaluator', 'mentor'], true)) {
             return;
         }
 
-        $isMember = $application->team->members()->where('user_id', $user->id)->exists();
-        if (!$isMember) {
-            abort(403, 'You do not have access to this application.');
-        }
-    }
-
-    private function authorizeTeamLeaderOfApplication($user, Application $application): void
-    {
-        if ($application->team->leader_id !== $user->id) {
-            abort(403, 'Only the team leader can modify the application.');
-        }
-    }
-
-    private function auditLog($user, string $action, Application $application, array $payload = []): void
-    {
-        AuditEvent::create([
-            'actor_id'    => $user->id,
-            'action'      => $action,
-            'entity_type' => Application::class,
-            'entity_id'   => $application->id,
-            'payload'     => $payload,
-            'ip_address'  => request()->ip(),
-            'user_agent'  => request()->userAgent(),
-        ]);
+        abort_unless(
+            $application->team()->whereHas('members', fn ($q) => $q->where('user_id', $user->id))->exists(),
+            403
+        );
     }
 }

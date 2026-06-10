@@ -5,8 +5,9 @@ use App\Http\Controllers\Api\Admin\AdminAuditEventController;
 use App\Http\Controllers\Api\Admin\AdminCallController;
 use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Admin\AdminProgramController;
-use App\Http\Controllers\Api\Mentor\MentorshipController as MentorMentorshipController;
 use App\Http\Controllers\Api\Admin\AdminReportController;
+use App\Http\Controllers\Api\Admin\DashboardController;
+use App\Http\Controllers\Api\Mentor\MentorshipController as MentorMentorshipController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProgramA\TeamInvitationController;
@@ -30,14 +31,12 @@ Route::middleware('auth:api')->group(function () {
 
     Route::get('/users', [UserController::class, 'index']);
 
-    // Mentor workspace (the mentor's own mentorships)
     Route::prefix('mentor')->group(function () {
         Route::get('/mentorships', [MentorMentorshipController::class, 'index']);
         Route::get('/mentorships/{mentorship}', [MentorMentorshipController::class, 'show']);
         Route::post('/mentorships/{mentorship}/consultations', [MentorMentorshipController::class, 'storeConsultation']);
     });
 
-    // Notifications (bell)
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead']);
     Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
@@ -65,7 +64,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/program-b/companies/invitations/accept', [CompanyMemberController::class, 'accept']);
 
     Route::middleware(['role:nti_admin,superadmin', 'admin.audit'])->prefix('admin')->group(function () {
-        Route::get('/dashboard', [AdminController::class, 'dashboard']);
+        Route::get('/dashboard', [DashboardController::class, 'index']);
 
         Route::get('/audit-events', [AdminAuditEventController::class, 'index']);
         Route::get('/audit-events/filters', [AdminAuditEventController::class, 'filters']);
