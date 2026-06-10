@@ -73,7 +73,7 @@ Route::middleware('auth:api')->group(function () {
 
     Route::middleware(['role:nti_admin,superadmin', 'admin.audit'])->prefix('admin')->group(function () {
 
-        Route::get('/dashboard', [AdminController::class, 'dashboard']);
+        Route::get('/dashboard', [DashboardController::class, 'index']);
         Route::post('/users/{id}/approve-deletion', [AdminController::class, 'approveDeletion']);
         Route::post('/users/{id}/reject-deletion', [AdminController::class, 'rejectDeletion']);
 
@@ -106,6 +106,7 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/applications', [AdminApplicationController::class, 'index']);
         Route::get('/applications/{application}', [AdminApplicationController::class, 'show']);
         Route::patch('/applications/{application}/assign-mentor', [AdminApplicationController::class, 'assignMentor']);
+        Route::patch('/applications/{application}/status', [AdminApplicationController::class, 'updateStatus']);
 
         Route::get('/teams', [AdminController::class, 'teams']);
 
