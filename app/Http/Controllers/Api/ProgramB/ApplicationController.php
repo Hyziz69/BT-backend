@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api\ProgramB;
 use App\Http\Controllers\Controller;
 use App\Models\Application;
 use App\Models\AuditEvent;
-use App\Models\Challenge;
+use App\Models\CompanyChallenge as Challenge;
 use App\Models\Evaluation;
 use App\Models\Milestone;
 use App\Models\Notification;
@@ -127,9 +127,9 @@ class ApplicationController extends Controller
         $user = $request->user();
 
         $data = $request->validate([
-            'challenge_id' => ['required', 'uuid', 'exists:challenges,id'],
+            'challenge_id' => ['required', 'uuid', 'exists:company_challenges,id'],
             'team_id' => ['required', 'uuid', 'exists:teams,id'],
-            'summary' => ['required', 'string', 'max:3000'],
+            'summary' => ['nullable', 'string', 'max:3000'],
             'solution' => ['nullable', 'string', 'max:3000'],
             'requested_budget' => ['nullable', 'numeric', 'min:0'],
         ]);
@@ -173,7 +173,7 @@ class ApplicationController extends Controller
                 'challenge_id' => $challenge->id,
                 'team_id' => $team->id,
                 'status' => 'submitted',
-                'summary' => $data['summary'],
+                'summary' => $data['summary'] ?? $data['motivation_letter'] ?? null,
                 'problem' => $challenge->description,
                 'solution' => $data['solution'] ?? null,
                 'requested_budget' => $data['requested_budget'] ?? null,
@@ -592,6 +592,64 @@ class ApplicationController extends Controller
         ]);
     }
 
+    public function approveDelivery(Request $request, Application $application): JsonResponse
+{
+    $user = $request->user();
+
+    if ($user->account_type !== 'company_contact' && !in_array($user->account_type, ['nti_admin', 'superadmin'], true)) {
+        return response()->json(['message' => 'Only company contacts or admins can approve delivery.'], 403);
+    }
+
+    if ($user->account_type === 'company_contact') {
+        $belongsToCompany = $application->challenge?->company?->users()
+            ->where('users.id', $user->id)
+            ->exists();
+
+        if (!$belongsToCompany) {
+            return response()->json(['message' => 'This challenge does not belong to your company.'], 403);
+        }
+    }
+
+    if ($application->status === 'archived') {
+        return response()->json(['message' => 'This project is already closed.'], 422);
+    }
+
+    DB::transaction(function () use ($application) {
+        $application->update(['status' => 'archived']);
+
+        if ($application->challenge) {
+            $application->challenge->update(['status' => 'closed']);
+        }
+
+        Milestone::create([
+            'application_id' => $application->id,
+            'title'          => 'Final delivery approved',
+            'status'         => 'completed',
+            'due_date'       => now(),
+            'comment'        => 'Company approved the final solution. Project successfully closed.',
+        ]);
+    });
+
+    $this->notifyTeamMembers(
+        $application,
+        'project_completed',
+        'Project completed 🎉',
+        "Your project \"{$application->challenge?->title}\" was approved and closed by the company."
+    );
+
+    return response()->json([
+        'message' => 'Project approved and closed.',
+        'application' => $application->fresh([
+            'team.members',
+            'challenge.company',
+            'call.program',
+            'documents',
+            'mentorships.mentor',
+            'milestones',
+        ]),
+    ]);
+}
+
     private function authorizeApplicationAccess(Request $request, Application $application): void
     {
         $user = $request->user();
@@ -666,4 +724,6 @@ class ApplicationController extends Controller
             ]);
         }
     }
+
+    
 }

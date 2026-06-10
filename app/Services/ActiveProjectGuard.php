@@ -24,7 +24,7 @@ class ActiveProjectGuard
         }
 
         $applications = Application::query()
-            ->with(['team:id,name', 'call:id,title,status,opens_at,closes_at', 'challenge:id,title'])
+            ->with(['team:id,name', 'call:id,title,status,opens_at,closes_at', 'challenge:id,title,company_id'])
             ->whereNotIn('status', self::FINISHED_STATUSES)
             ->whereHas('team.members', function ($query) use ($memberIds) {
                 $query->whereIn('users.id', $memberIds);
@@ -50,12 +50,10 @@ class ActiveProjectGuard
 
     public function conflictMessage(Application $application, Call $targetCall): string
     {
-        $teamName = $application->team?->name ?? 'This team';
-        $currentCall = $application->call?->title ?? 'another active call';
-        $targetCallTitle = $targetCall->title;
-        $projectTitle = $application->challenge?->title ?? 'active project/application';
+        $teamName = $application->team?->name ?? 'Your team';
+        $currentCall = $application->call?->title ?? 'another call';
 
-        return "{$teamName} already has an active project/application ({$projectTitle}) in '{$currentCall}'. It cannot join '{$targetCallTitle}' while the call periods overlap or the current project is still active.";
+        return "Your team already has an active project in \"{$currentCall}\". Complete or archive it before joining \"{$targetCall->title}\".";
     }
 
     private function callsOverlap(Call $first, Call $second): bool
