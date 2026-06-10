@@ -24,7 +24,6 @@ class ApplicationController extends Controller
     }
 
     private const TRANSITIONS = [
-<<<<<<< HEAD
     'student' => [
         'draft'              => ['submitted'],
         'pending_supplement' => ['submitted'],
@@ -47,29 +46,6 @@ class ApplicationController extends Controller
         'submitted' => ['approved'],
     ],
 ];
-=======
-        'student' => [
-            'draft'              => ['submitted'],
-            'pending_supplement' => ['submitted'],
-        ],
-        'nti_admin' => [
-            'submitted'          => ['formally_verified', 'rejected'],
-            'formally_verified'  => ['in_evaluation', 'pending_supplement'],
-            'in_evaluation'      => ['pending_supplement', 'approved', 'rejected'],
-            'approved'           => ['onboarding'],
-            'onboarding'         => ['active'],
-            'active'             => ['paused', 'completed'],
-            'paused'             => ['active', 'completed'],
-            'completed'          => ['archived'],
-        ],
-        'evaluator' => [
-            'formally_verified' => ['in_evaluation', 'pending_supplement'],
-        ],
-        'company_contact' => [
-            'submitted' => ['approved'],
-        ],
-    ];
->>>>>>> sandbox-merge
 
     public function index(Request $request): JsonResponse
     {
@@ -196,7 +172,6 @@ class ApplicationController extends Controller
     public function transition(Request $request, Application $application): JsonResponse
     {
         $user = $request->user();
-<<<<<<< HEAD
 
         $validated = $request->validate([
             'status'         => 'required|string|in:draft,submitted,formally_verified,in_evaluation,pending_supplement,approved,rejected,onboarding,active,paused,completed,archived',
@@ -226,7 +201,6 @@ class ApplicationController extends Controller
             $application->load(['team.members', 'call.program', 'challenge', 'milestones', 'mentorships.mentor']);
             $application->setAttribute('available_transitions', self::TRANSITIONS['nti_admin'][$newStatus] ?? []);
 
-            // Notify on completion
             if ($newStatus === 'completed') {
                 $memberIds = $application->team->members()->pluck('team_members.user_id');
                 \App\Models\Notification::notifyUsers(
@@ -253,35 +227,8 @@ class ApplicationController extends Controller
         if ($newStatus === 'submitted') {
             if ($application->team->leader_id !== $user->id) {
                 return response()->json(['message' => 'Only the team leader can submit the application.'], 403);
-=======
-        $toStatus = $request->status;
-        $fromStatus = $application->status;
-
-        $roleTransitions = self::TRANSITIONS[$user->account_type] ?? [];
-        $allowed = $roleTransitions[$fromStatus] ?? [];
-
-        if (!in_array($toStatus, $allowed, true) && !in_array($user->account_type, ['superadmin'], true)) {
-            return response()->json([
-                'message' => 'This status transition is not allowed for your role.',
-            ], 403);
-        }
-
-        if (in_array($toStatus, ['approved', 'onboarding', 'active'], true)) {
-            $application->loadMissing(['team.members', 'call']);
-
-            if ($application->team && $application->call) {
-                $activeConflict = $this->activeProjectGuard->findConflict($application->team, $application->call);
-
-                if ($activeConflict && $activeConflict->id !== $application->id) {
-                    return response()->json([
-                        'message' => $this->activeProjectGuard->conflictMessage($activeConflict, $application->call),
-                    ], 422);
-                }
->>>>>>> sandbox-merge
             }
-        }
 
-<<<<<<< HEAD
             $missingCvs = [];
             $application->loadMissing('team.members.profile');
             foreach ($application->team->members as $member) {
@@ -312,7 +259,6 @@ class ApplicationController extends Controller
         $application->load(['team.members', 'call.program', 'challenge', 'milestones', 'mentorships.mentor']);
         $application->setAttribute('available_transitions', self::TRANSITIONS[$roleKey][$newStatus] ?? []);
 
-        // Notify team members of status change
         $memberIds = $application->team->members()->pluck('team_members.user_id');
         \App\Models\Notification::notifyUsers(
             $memberIds,
@@ -321,7 +267,6 @@ class ApplicationController extends Controller
             "Your application status changed to '{$newStatus}'."
         );
 
-        // Extra notification on completion
         if ($newStatus === 'completed') {
             \App\Models\Notification::notifyUsers(
                 $memberIds,
@@ -332,48 +277,6 @@ class ApplicationController extends Controller
         }
 
         return response()->json($application);
-=======
-        DB::transaction(function () use ($application, $toStatus, $request, $fromStatus, $user) {
-            $application->update([
-                'status' => $toStatus,
-                'submitted_at' => $toStatus === 'submitted' ? now() : $application->submitted_at,
-                'decided_at' => in_array($toStatus, ['approved', 'rejected'], true) ? now() : $application->decided_at,
-            ]);
-
-            AuditEvent::create([
-                'user_id' => $user->id,
-                'action' => 'application_status_changed',
-                'entity_type' => Application::class,
-                'entity_id' => $application->id,
-                'properties' => [
-                    'from' => $fromStatus,
-                    'to' => $toStatus,
-                    'comment' => $request->comment,
-                ],
-            ]);
-
-            if ($application->team) {
-                foreach ($application->team->members as $member) {
-                    Notification::create([
-                        'user_id' => $member->id,
-                        'type' => 'application_status_changed',
-                        'title' => 'Application status changed',
-                        'message' => "Your application status changed to {$toStatus}.",
-                        'data' => [
-                            'application_id' => $application->id,
-                            'from' => $fromStatus,
-                            'to' => $toStatus,
-                        ],
-                    ]);
-                }
-            }
-        });
-
-        return response()->json([
-            'message' => 'Application status updated.',
-            'data' => new ApplicationResource($application->fresh(['team', 'call.program', 'documents', 'evaluations'])),
-        ]);
->>>>>>> sandbox-merge
     }
 
     public function evaluate(Request $request, Application $application): JsonResponse
