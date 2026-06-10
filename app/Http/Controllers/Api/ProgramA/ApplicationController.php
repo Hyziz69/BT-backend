@@ -323,4 +323,15 @@ class ApplicationController extends Controller
             403
         );
     }
+
+    private function resolveRoleKey(string $accountType): string
+    {
+        return match ($accountType) {
+            'student', 'team_leader' => 'student',
+            'nti_admin', 'superadmin' => 'nti_admin',
+            'evaluator'              => 'evaluator',
+            'company_contact'        => 'company_contact',
+            default                  => 'student',
+        };
+    }
 }
